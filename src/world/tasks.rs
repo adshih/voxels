@@ -188,6 +188,7 @@ pub fn render_chunks(
                 chunk.coord.0.y as f32 * CHUNK_WORLD_SIZE,
                 chunk.coord.0.z as f32 * CHUNK_WORLD_SIZE,
             )),
+            Visibility::Inherited,
         ));
     }
 }

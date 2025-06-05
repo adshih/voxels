@@ -54,7 +54,11 @@ impl Plugin for WorldPlugin {
             .add_systems(
                 Update,
                 (
-                    (queue_chunk_operations, process_chunk_operations)
+                    (
+                        queue_chunk_operations,
+                        process_chunk_operations,
+                        update_chunk_visibility,
+                    )
                         .chain()
                         .in_set(ChunkPipeline::Management),
                     (
