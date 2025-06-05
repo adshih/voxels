@@ -3,25 +3,6 @@ use bevy::prelude::*;
 
 use crate::player::Player;
 
-pub struct DebugPlugin;
-
-impl Plugin for DebugPlugin {
-    fn build(&self, app: &mut App) {
-        app.add_plugins(FrameTimeDiagnosticsPlugin {
-            smoothing_factor: 0.5,
-            ..default()
-        })
-        .add_systems(Startup, setup_debug_ui)
-        .add_systems(
-            Update,
-            (
-                (debug_performance, debug_player_position, debug_camera_info).run_if(is_debug),
-                toggle_debug,
-            ),
-        );
-    }
-}
-
 #[derive(Component)]
 struct DebugPanel;
 
@@ -57,6 +38,25 @@ impl Default for DebugTextBundle {
 #[derive(Resource, Default)]
 struct DebugState {
     enabled: bool,
+}
+
+pub struct DebugPlugin;
+
+impl Plugin for DebugPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_plugins(FrameTimeDiagnosticsPlugin {
+            smoothing_factor: 0.5,
+            ..default()
+        })
+        .add_systems(Startup, setup_debug_ui)
+        .add_systems(
+            Update,
+            (
+                (debug_performance, debug_player_position, debug_camera_info).run_if(is_debug),
+                toggle_debug,
+            ),
+        );
+    }
 }
 
 fn is_debug(debug_state: Res<DebugState>) -> bool {
