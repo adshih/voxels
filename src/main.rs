@@ -21,14 +21,12 @@ enum Systems {
 #[derive(Resource)]
 struct Settings {
     auto_lock_cursor: bool,
-    render_distance: u8,
 }
 
 impl Default for Settings {
     fn default() -> Self {
         Self {
             auto_lock_cursor: false,
-            render_distance: 10,
         }
     }
 }

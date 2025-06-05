@@ -1,16 +1,18 @@
 use bevy::prelude::*;
+use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet, VecDeque};
 
+use super::WorldSettings;
 use super::events::*;
-use crate::{Settings, player::Player};
+use crate::player::Player;
 
 const VOXEL_SIZE: f32 = 1.0;
 
-pub const CHUNK_SIZE: usize = 32;
-const CHUNK_VOLUME: usize = CHUNK_SIZE.pow(3);
-const CHUNK_WORLD_SIZE: f32 = CHUNK_SIZE as f32 * VOXEL_SIZE;
+pub const CHUNK_SIZE: usize = 16;
+pub const CHUNK_VOLUME: usize = CHUNK_SIZE.pow(3);
+pub const CHUNK_WORLD_SIZE: f32 = CHUNK_SIZE as f32 * VOXEL_SIZE;
 
-const MAX_OPERATIONS_PER_FRAME: usize = 4;
+const MAX_OPERATIONS_PER_FRAME: usize = 2;
 
 #[derive(Copy, Clone, Eq, PartialEq)]
 pub struct VoxelType(pub u8);
@@ -136,29 +138,40 @@ impl ChunkManager {
 
 pub fn queue_chunk_operations(
     mut chunk_manager: ResMut<ChunkManager>,
-    settings: Res<Settings>,
+    world_settings: Res<WorldSettings>,
     player_query: Query<&Transform, With<Player>>,
 ) {
     let player_transform = player_query.single().expect("Could not find player");
     let player_chunk = ChunkCoord::from_world_pos(player_transform.translation);
-    let render_distance = settings.render_distance as i32;
+    let player_pos = player_transform.translation;
+    let render_distance = world_settings.render_distance as i32;
 
-    // queue load ops
+    let mut chunks_to_load = Vec::new();
+
     for x in -render_distance..=render_distance {
-        for y in -render_distance..=render_distance {
-            for z in -render_distance..=render_distance {
-                let distance_sq = x * x + y * y + z * z;
+        for z in -render_distance..=render_distance {
+            for y in -2..=2 {
+                let distance_sq = x * x + z * z + y * y;
                 let max_distance_sq = render_distance * render_distance;
 
                 if distance_sq <= max_distance_sq {
                     let chunk_coord = ChunkCoord(player_chunk.0 + IVec3::new(x, y, z));
-                    chunk_manager.queue_load(chunk_coord);
+
+                    let chunk_world_pos = Vec3::new(
+                        chunk_coord.0.x as f32 * CHUNK_WORLD_SIZE,
+                        chunk_coord.0.y as f32 * CHUNK_WORLD_SIZE,
+                        chunk_coord.0.z as f32 * CHUNK_WORLD_SIZE,
+                    );
+                    let distance = player_pos.distance(chunk_world_pos);
+
+                    chunks_to_load.push((chunk_coord, distance));
                 }
             }
         }
     }
 
-    // queue unload ops
+    chunks_to_load.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+
     let unload_distance = render_distance + 2;
     let chunks_to_unload: Vec<ChunkCoord> = chunk_manager
         .loaded_chunks
@@ -172,6 +185,10 @@ pub fn queue_chunk_operations(
 
     for coord in chunks_to_unload {
         chunk_manager.queue_unload(coord);
+    }
+
+    for (coord, _distance) in chunks_to_load {
+        chunk_manager.queue_load(coord);
     }
 }
 
@@ -189,11 +206,9 @@ pub fn process_chunk_operations(
     for operation in batch {
         match operation {
             ChunkOperation::Load(coord) => {
-                if !chunk_manager.loaded_chunks.contains_key(&coord) {
+                if let Entry::Vacant(e) = chunk_manager.loaded_chunks.entry(coord) {
                     let entity = commands.spawn(Chunk { coord }).id();
-
-                    chunk_manager.loaded_chunks.insert(coord, entity);
-
+                    e.insert(entity);
                     generation_events.write(ChunkNeedsGeneration { entity, coord });
                 }
             }

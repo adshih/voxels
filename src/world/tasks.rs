@@ -1,11 +1,13 @@
-use bevy::asset::RenderAssetUsages;
 use bevy::prelude::*;
-use bevy::render::mesh::{Indices, PrimitiveTopology};
 use bevy::tasks::futures_lite::future;
 use bevy::tasks::{AsyncComputeTaskPool, Task};
 
+use super::core::CHUNK_WORLD_SIZE;
 use super::events::*;
 use crate::world::*;
+
+const MAX_GENERATION_TASKS: usize = 3;
+const MAX_MESH_TASKS: usize = 1;
 
 #[derive(Component)]
 pub struct ChunkGenerationTask(Task<ChunkVoxels>);
@@ -19,7 +21,12 @@ pub struct ChunkMeshTask {
 pub fn start_generation_tasks(
     mut commands: Commands,
     mut events: EventReader<ChunkNeedsGeneration>,
+    active_tasks: Query<&ChunkGenerationTask>,
 ) {
+    if active_tasks.iter().count() >= MAX_GENERATION_TASKS {
+        return;
+    }
+
     let pool = AsyncComputeTaskPool::get();
 
     for event in events.read() {
@@ -58,7 +65,6 @@ pub fn route_voxels_to_mesh(
         mesh_events.write(ChunkNeedsMesh {
             entity: event.entity,
             coord: event.coord,
-            priority: MeshPriority::default(),
         });
     }
 }
@@ -67,7 +73,12 @@ pub fn start_mesh_tasks(
     mut commands: Commands,
     mut events: EventReader<ChunkNeedsMesh>,
     chunks: Query<&ChunkVoxels, Without<ChunkMeshTask>>,
+    active_tasks: Query<&ChunkMeshTask>,
 ) {
+    if active_tasks.iter().count() >= MAX_MESH_TASKS {
+        return;
+    }
+
     let pool = AsyncComputeTaskPool::get();
 
     for event in events.read() {
@@ -107,7 +118,7 @@ pub fn complete_mesh_tasks(
     }
 }
 
-pub fn apply_mesh_to_world(
+pub fn validate_mesh_versions(
     mut commands: Commands,
     mut events: EventReader<ChunkMeshReady>,
     chunks: Query<(&Chunk, &ChunkVoxels)>,
@@ -124,7 +135,6 @@ pub fn apply_mesh_to_world(
                 mesh_events.write(ChunkNeedsMesh {
                     entity: event.entity,
                     coord: chunk.coord,
-                    priority: MeshPriority::default(),
                 });
             }
         }
@@ -155,64 +165,29 @@ fn generate_terrain(coord: ChunkCoord) -> ChunkVoxels {
     voxels
 }
 
-fn generate_mesh(voxels: ChunkVoxels) -> Mesh {
-    let mut positions = Vec::new();
-    let mut indices = Vec::new();
-    let mut normals = Vec::new();
-
-    for x in 0..CHUNK_SIZE {
-        for y in 0..CHUNK_SIZE {
-            for z in 0..CHUNK_SIZE {
-                if voxels.get(x, y, z).is_solid() {
-                    add_cube_to_mesh(
-                        &mut positions,
-                        &mut indices,
-                        &mut normals,
-                        [x as f32, y as f32, z as f32],
-                    );
-                }
-            }
-        }
-    }
-
-    let mut mesh = Mesh::new(
-        PrimitiveTopology::TriangleList,
-        RenderAssetUsages::default(),
-    );
-
-    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
-    mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
-    mesh.insert_indices(Indices::U32(indices));
-    mesh
-}
-
-fn add_cube_to_mesh(
-    positions: &mut Vec<[f32; 3]>,
-    indices: &mut Vec<u32>,
-    normals: &mut Vec<[f32; 3]>,
-    pos: [f32; 3],
+pub fn render_chunks(
+    mut commands: Commands,
+    changed_meshes: Query<(Entity, &Chunk, &ChunkMesh), Changed<ChunkMesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    asset_server: Res<AssetServer>,
 ) {
-    let base_index = positions.len() as u32;
+    for (entity, chunk, chunk_mesh) in changed_meshes.iter() {
+        let texture_handle = asset_server.load("blocks.png");
 
-    let verts = [
-        [pos[0], pos[1], pos[2]],
-        [pos[0] + 1.0, pos[1], pos[2]],
-        [pos[0] + 1.0, pos[1] + 1.0, pos[2]],
-        [pos[0], pos[1] + 1.0, pos[2]],
-    ];
+        let material = materials.add(StandardMaterial {
+            base_color_texture: Some(texture_handle),
+            unlit: false,
+            ..default()
+        });
 
-    positions.extend_from_slice(&verts);
-
-    for _ in 0..4 {
-        normals.push([0.0, 0.0, 1.0]);
+        commands.entity(entity).insert((
+            Mesh3d(chunk_mesh.handle.clone()),
+            MeshMaterial3d(material),
+            Transform::from_translation(Vec3::new(
+                chunk.coord.0.x as f32 * CHUNK_WORLD_SIZE,
+                chunk.coord.0.y as f32 * CHUNK_WORLD_SIZE,
+                chunk.coord.0.z as f32 * CHUNK_WORLD_SIZE,
+            )),
+        ));
     }
-
-    indices.extend_from_slice(&[
-        base_index,
-        base_index + 1,
-        base_index + 2,
-        base_index,
-        base_index + 2,
-        base_index + 3,
-    ]);
 }

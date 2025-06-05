@@ -1,12 +1,27 @@
 mod core;
 mod events;
+mod mesh;
 mod tasks;
 
 pub use core::*;
 pub use events::*;
+pub use mesh::*;
 use tasks::*;
 
 use bevy::prelude::*;
+
+#[derive(Resource)]
+pub struct WorldSettings {
+    render_distance: u8,
+}
+
+impl Default for WorldSettings {
+    fn default() -> Self {
+        Self {
+            render_distance: 10,
+        }
+    }
+}
 
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ChunkPipeline {
@@ -20,7 +35,8 @@ pub struct WorldPlugin;
 
 impl Plugin for WorldPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<ChunkManager>()
+        app.init_resource::<WorldSettings>()
+            .init_resource::<ChunkManager>()
             .add_event::<ChunkNeedsGeneration>()
             .add_event::<ChunkVoxelsReady>()
             .add_event::<ChunkNeedsMesh>()
@@ -51,7 +67,9 @@ impl Plugin for WorldPlugin {
                     (start_mesh_tasks, complete_mesh_tasks)
                         .chain()
                         .in_set(ChunkPipeline::Meshing),
-                    apply_mesh_to_world.in_set(ChunkPipeline::Completion),
+                    (validate_mesh_versions, render_chunks)
+                        .chain()
+                        .in_set(ChunkPipeline::Completion),
                 ),
             );
     }

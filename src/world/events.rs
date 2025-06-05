@@ -17,7 +17,6 @@ pub struct ChunkVoxelsReady {
 pub struct ChunkNeedsMesh {
     pub entity: Entity,
     pub coord: ChunkCoord,
-    pub priority: MeshPriority,
 }
 
 #[derive(Event)]
