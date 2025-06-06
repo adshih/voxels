@@ -1,6 +1,5 @@
-use bevy::math::Affine3A;
 use bevy::prelude::*;
-use bevy::render::primitives::{Aabb, Frustum};
+use bevy::render::primitives::Aabb;
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet, VecDeque};
 
@@ -136,49 +135,6 @@ impl ChunkManager {
             self.pending_ops.push_back(ChunkOperation::Unload(coord));
         }
     }
-
-    pub fn cull_chunks(&mut self, frustum: &Frustum, margin: f32) {
-        self.visible_chunks.clear();
-
-        for &coord in self.loaded_chunks.keys() {
-            let chunk_aabb = get_chunk_aabb(coord, margin);
-
-            if frustum.intersects_obb(&chunk_aabb, &Affine3A::IDENTITY, true, true) {
-                self.visible_chunks.insert(coord);
-            }
-        }
-    }
-}
-
-fn get_chunk_aabb(coord: ChunkCoord, margin: f32) -> Aabb {
-    let min = Vec3::new(
-        coord.0.x as f32 * CHUNK_WORLD_SIZE,
-        coord.0.y as f32 * CHUNK_WORLD_SIZE,
-        coord.0.z as f32 * CHUNK_WORLD_SIZE,
-    );
-    let max = min + Vec3::splat(CHUNK_WORLD_SIZE);
-
-    let expansion = Vec3::splat(margin);
-    Aabb::from_min_max(min - expansion, max + expansion)
-}
-
-pub fn update_chunk_visibility(
-    mut chunk_manager: ResMut<ChunkManager>,
-    mut chunks: Query<(&Chunk, &mut Visibility), With<ChunkMesh>>,
-    camera_query: Query<&Frustum, With<Camera>>,
-) {
-    if let Ok(frustum) = camera_query.single() {
-        let margin = CHUNK_WORLD_SIZE * 1.5;
-        chunk_manager.cull_chunks(frustum, margin);
-
-        for (chunk, mut visibility) in chunks.iter_mut() {
-            *visibility = if chunk_manager.visible_chunks.contains(&chunk.coord) {
-                Visibility::Inherited
-            } else {
-                Visibility::Hidden
-            };
-        }
-    }
 }
 
 pub fn queue_chunk_operations(
@@ -252,7 +208,17 @@ pub fn process_chunk_operations(
         match operation {
             ChunkOperation::Load(coord) => {
                 if let Entry::Vacant(e) = chunk_manager.loaded_chunks.entry(coord) {
-                    let entity = commands.spawn(Chunk { coord }).id();
+                    let entity = commands
+                        .spawn((
+                            Chunk { coord },
+                            Aabb::from_min_max(Vec3::ZERO, Vec3::splat(CHUNK_WORLD_SIZE)),
+                            Transform::from_translation(Vec3::new(
+                                coord.0.x as f32 * CHUNK_WORLD_SIZE,
+                                coord.0.y as f32 * CHUNK_WORLD_SIZE,
+                                coord.0.z as f32 * CHUNK_WORLD_SIZE,
+                            )),
+                        ))
+                        .id();
                     e.insert(entity);
                     generation_events.write(ChunkNeedsGeneration { entity, coord });
                 }

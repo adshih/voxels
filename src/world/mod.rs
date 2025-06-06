@@ -17,9 +17,7 @@ pub struct WorldSettings {
 
 impl Default for WorldSettings {
     fn default() -> Self {
-        Self {
-            render_distance: 10,
-        }
+        Self { render_distance: 6 }
     }
 }
 
@@ -54,11 +52,7 @@ impl Plugin for WorldPlugin {
             .add_systems(
                 Update,
                 (
-                    (
-                        queue_chunk_operations,
-                        process_chunk_operations,
-                        update_chunk_visibility,
-                    )
+                    (queue_chunk_operations, process_chunk_operations)
                         .chain()
                         .in_set(ChunkPipeline::Management),
                     (

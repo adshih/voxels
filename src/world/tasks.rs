@@ -2,7 +2,6 @@ use bevy::prelude::*;
 use bevy::tasks::futures_lite::future;
 use bevy::tasks::{AsyncComputeTaskPool, Task};
 
-use super::core::CHUNK_WORLD_SIZE;
 use super::events::*;
 use crate::world::*;
 
@@ -167,11 +166,11 @@ fn generate_terrain(coord: ChunkCoord) -> ChunkVoxels {
 
 pub fn render_chunks(
     mut commands: Commands,
-    changed_meshes: Query<(Entity, &Chunk, &ChunkMesh), Changed<ChunkMesh>>,
+    changed_meshes: Query<(Entity, &ChunkMesh), Changed<ChunkMesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     asset_server: Res<AssetServer>,
 ) {
-    for (entity, chunk, chunk_mesh) in changed_meshes.iter() {
+    for (entity, chunk_mesh) in changed_meshes.iter() {
         let texture_handle = asset_server.load("blocks.png");
 
         let material = materials.add(StandardMaterial {
@@ -180,15 +179,8 @@ pub fn render_chunks(
             ..default()
         });
 
-        commands.entity(entity).insert((
-            Mesh3d(chunk_mesh.handle.clone()),
-            MeshMaterial3d(material),
-            Transform::from_translation(Vec3::new(
-                chunk.coord.0.x as f32 * CHUNK_WORLD_SIZE,
-                chunk.coord.0.y as f32 * CHUNK_WORLD_SIZE,
-                chunk.coord.0.z as f32 * CHUNK_WORLD_SIZE,
-            )),
-            Visibility::Inherited,
-        ));
+        commands
+            .entity(entity)
+            .insert((Mesh3d(chunk_mesh.handle.clone()), MeshMaterial3d(material)));
     }
 }

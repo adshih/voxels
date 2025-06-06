@@ -71,14 +71,7 @@ fn main() {
         .run();
 }
 
-fn setup(
-    mut commands: Commands,
-    mut window: Query<&mut Window>,
-    settings: Res<Settings>,
-    //
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
+fn setup(mut commands: Commands, mut window: Query<&mut Window>, settings: Res<Settings>) {
     if settings.auto_lock_cursor {
         let mut window = window.single_mut().expect("Could not find window");
         window.cursor_options.grab_mode = CursorGrabMode::Locked;
@@ -92,20 +85,6 @@ fn setup(
             ..default()
         },
         Transform::from_xyz(4.0, 8.0, 4.0),
-    ));
-
-    commands.spawn((
-        Name::new("Ground"),
-        Mesh3d(meshes.add(Circle::new(4.0))),
-        MeshMaterial3d(materials.add(Color::WHITE)),
-        Transform::from_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
-    ));
-
-    commands.spawn((
-        Name::new("Cube"),
-        Mesh3d(meshes.add(Cuboid::new(1.0, 1.0, 1.0))),
-        MeshMaterial3d(materials.add(Color::srgb_u8(124, 144, 255))),
-        Transform::from_xyz(0.0, 0.5, 0.0),
     ));
 }
 

@@ -40,7 +40,7 @@ fn spawn_player(mut commands: Commands) {
         Name::new("Player"),
         Player::default(),
         Input::default(),
-        Transform::from_xyz(-2.5, 4.5, 9.0),
+        Transform::from_xyz(0.0, 30.0, 0.0),
     ));
 }
 
