@@ -2,11 +2,13 @@ mod core;
 mod events;
 mod mesh;
 mod tasks;
+mod terrain;
 
 pub use core::*;
 pub use events::*;
 pub use mesh::*;
 use tasks::*;
+pub use terrain::*;
 
 use bevy::prelude::*;
 
@@ -35,6 +37,7 @@ impl Plugin for WorldPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<WorldSettings>()
             .init_resource::<ChunkManager>()
+            .init_resource::<TerrainNoise>()
             .add_event::<ChunkNeedsGeneration>()
             .add_event::<ChunkVoxelsReady>()
             .add_event::<ChunkNeedsMesh>()

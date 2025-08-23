@@ -69,11 +69,11 @@ impl ChunkVoxels {
     }
 
     pub fn set(&mut self, x: usize, y: usize, z: usize, voxel_type: VoxelType) {
-        if let Some(i) = self.index(x, y, z) {
-            if self.data[i] != voxel_type {
-                self.data[i] = voxel_type;
-                self.version += 1;
-            }
+        if let Some(i) = self.index(x, y, z)
+            && self.data[i] != voxel_type
+        {
+            self.data[i] = voxel_type;
+            self.version += 1;
         }
     }
 

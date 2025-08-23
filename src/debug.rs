@@ -94,15 +94,15 @@ fn debug_performance(
     if let Ok(mut text) = debug_text.single_mut() {
         let mut perf_info = String::new();
 
-        if let Some(fps) = diagnostics.get(&FrameTimeDiagnosticsPlugin::FPS) {
-            if let Some(value) = fps.smoothed() {
-                perf_info.push_str(&format!("{:.0} fps", value));
+        if let Some(fps) = diagnostics.get(&FrameTimeDiagnosticsPlugin::FPS)
+            && let Some(value) = fps.smoothed()
+        {
+            perf_info.push_str(&format!("{:.0} fps", value));
 
-                if let Some(frame_time) = diagnostics.get(&FrameTimeDiagnosticsPlugin::FRAME_TIME) {
-                    if let Some(ft_value) = frame_time.smoothed() {
-                        perf_info.push_str(&format!(" ({:.1}ms)", ft_value));
-                    }
-                }
+            if let Some(frame_time) = diagnostics.get(&FrameTimeDiagnosticsPlugin::FRAME_TIME)
+                && let Some(ft_value) = frame_time.smoothed()
+            {
+                perf_info.push_str(&format!(" ({:.1}ms)", ft_value));
             }
         }
 

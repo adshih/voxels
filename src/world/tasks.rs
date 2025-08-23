@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use bevy::prelude::*;
 use bevy::tasks::futures_lite::future;
 use bevy::tasks::{AsyncComputeTaskPool, Task};
@@ -21,6 +23,7 @@ pub fn start_generation_tasks(
     mut commands: Commands,
     mut events: EventReader<ChunkNeedsGeneration>,
     active_tasks: Query<&ChunkGenerationTask>,
+    terrain_noise: Res<TerrainNoise>,
 ) {
     if active_tasks.iter().count() >= MAX_GENERATION_TASKS {
         return;
@@ -30,7 +33,9 @@ pub fn start_generation_tasks(
 
     for event in events.read() {
         let coord = event.coord;
-        let task = pool.spawn(async move { generate_terrain(coord) });
+        let noise_table = Arc::clone(&terrain_noise.table);
+
+        let task = pool.spawn(async move { generate_terrain(coord, noise_table) });
 
         commands
             .entity(event.entity)
@@ -138,30 +143,6 @@ pub fn validate_mesh_versions(
             }
         }
     }
-}
-
-fn generate_terrain(coord: ChunkCoord) -> ChunkVoxels {
-    let mut voxels = ChunkVoxels::new();
-
-    for x in 0..CHUNK_SIZE {
-        for y in 0..CHUNK_SIZE {
-            for z in 0..CHUNK_SIZE {
-                let world_y = coord.0.y * CHUNK_SIZE as i32 + y as i32;
-
-                let voxel_type = if world_y < 16 {
-                    VoxelType::STONE
-                } else if world_y < 20 {
-                    VoxelType::DIRT
-                } else {
-                    VoxelType::AIR
-                };
-
-                voxels.set(x, y, z, voxel_type);
-            }
-        }
-    }
-
-    voxels
 }
 
 pub fn render_chunks(
