@@ -2,6 +2,7 @@ use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use bevy::prelude::*;
 
 use crate::player::Player;
+use crate::world::ChunkManager;
 
 #[derive(Component)]
 struct DebugPanel;
@@ -14,6 +15,9 @@ struct PlayerText;
 
 #[derive(Component)]
 struct CameraText;
+
+#[derive(Component)]
+struct ChunkManagerText;
 
 #[derive(Bundle)]
 struct DebugTextBundle {
@@ -52,15 +56,37 @@ impl Plugin for DebugPlugin {
         .add_systems(
             Update,
             (
-                (debug_performance, debug_player_position, debug_camera_info).run_if(is_debug),
-                toggle_debug,
-            ),
-        );
+                debug_performance,
+                debug_player_position,
+                debug_camera_info,
+                debug_chunk_manager,
+            )
+                .run_if(is_debug),
+        )
+        .add_systems(Update, toggle_debug);
     }
 }
 
 fn is_debug(debug_state: Res<DebugState>) -> bool {
     debug_state.enabled
+}
+
+fn toggle_debug(
+    keys: Res<ButtonInput<KeyCode>>,
+    mut debug_state: ResMut<DebugState>,
+    mut debug_panel: Query<&mut Visibility, With<DebugPanel>>,
+) {
+    if keys.just_pressed(KeyCode::F3) {
+        debug_state.enabled = !debug_state.enabled;
+
+        if let Ok(mut visibility) = debug_panel.single_mut() {
+            *visibility = if debug_state.enabled {
+                Visibility::Visible
+            } else {
+                Visibility::Hidden
+            };
+        }
+    }
 }
 
 fn setup_debug_ui(mut commands: Commands) {
@@ -84,6 +110,7 @@ fn setup_debug_ui(mut commands: Commands) {
             parent.spawn((DebugTextBundle::default(), PerformanceText));
             parent.spawn((DebugTextBundle::default(), PlayerText));
             parent.spawn((DebugTextBundle::default(), CameraText));
+            parent.spawn((DebugTextBundle::default(), ChunkManagerText));
         });
 }
 
@@ -140,20 +167,15 @@ fn debug_camera_info(
     }
 }
 
-fn toggle_debug(
-    keys: Res<ButtonInput<KeyCode>>,
-    mut debug_state: ResMut<DebugState>,
-    mut debug_panel: Query<&mut Visibility, With<DebugPanel>>,
+fn debug_chunk_manager(
+    chunk_manager: Res<ChunkManager>,
+    mut debug_text: Query<&mut Text, With<ChunkManagerText>>,
 ) {
-    if keys.just_pressed(KeyCode::F3) {
-        debug_state.enabled = !debug_state.enabled;
-
-        if let Ok(mut visibility) = debug_panel.single_mut() {
-            *visibility = if debug_state.enabled {
-                Visibility::Visible
-            } else {
-                Visibility::Hidden
-            };
-        }
+    if let Ok(mut text) = debug_text.single_mut() {
+        **text = format!(
+            "Chunk Manager:\nPending Operations: {}\nLoaded: {}",
+            chunk_manager.pending_ops.len(),
+            chunk_manager.loaded_chunks.len(),
+        );
     }
 }

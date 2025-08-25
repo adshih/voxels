@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy::render::primitives::Aabb;
 use std::collections::hash_map::Entry;
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, VecDeque};
 
 use super::WorldSettings;
 use super::events::*;
@@ -100,17 +100,16 @@ pub struct ChunkMesh {
     pub voxel_version: u32,
 }
 
-#[derive(Copy, Clone)]
-enum ChunkOperation {
+#[derive(Copy, Clone, Debug)]
+pub enum ChunkOperation {
     Load(ChunkCoord),
     Unload(ChunkCoord),
 }
 
 #[derive(Resource)]
 pub struct ChunkManager {
-    pending_ops: VecDeque<ChunkOperation>,
-    loaded_chunks: HashMap<ChunkCoord, Entity>,
-    visible_chunks: HashSet<ChunkCoord>,
+    pub pending_ops: VecDeque<ChunkOperation>,
+    pub loaded_chunks: HashMap<ChunkCoord, Entity>,
 }
 
 impl Default for ChunkManager {
@@ -118,7 +117,6 @@ impl Default for ChunkManager {
         Self {
             pending_ops: VecDeque::new(),
             loaded_chunks: HashMap::new(),
-            visible_chunks: HashSet::new(),
         }
     }
 }
