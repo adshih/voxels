@@ -3,6 +3,8 @@ mod debug;
 mod player;
 mod world;
 
+use bevy::asset::AssetMetaCheck;
+use bevy_fix_cursor_unlock_web::FixPointerUnlockPlugin;
 use camera::CameraPlugin;
 use debug::DebugPlugin;
 use player::PlayerPlugin;
@@ -53,17 +55,25 @@ fn main() {
             ),
         )
         .add_plugins((
-            DefaultPlugins.set(WindowPlugin {
-                primary_window: Some(Window {
-                    cursor_options,
+            DefaultPlugins
+                .set(WindowPlugin {
+                    primary_window: Some(Window {
+                        cursor_options,
+                        fit_canvas_to_parent: true,
+                        prevent_default_event_handling: false,
+                        ..default()
+                    }),
+                    ..default()
+                })
+                .set(AssetPlugin {
+                    meta_check: AssetMetaCheck::Never,
                     ..default()
                 }),
-                ..default()
-            }),
             CameraPlugin,
             DebugPlugin,
             PlayerPlugin,
             WorldPlugin,
+            FixPointerUnlockPlugin,
         ))
         .insert_resource(settings)
         .add_systems(Startup, setup)

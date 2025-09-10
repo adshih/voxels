@@ -52,6 +52,7 @@ impl Plugin for WorldPlugin {
                 )
                     .chain(),
             )
+            .add_systems(Startup, load_assets)
             .add_systems(
                 Update,
                 (
@@ -74,4 +75,12 @@ impl Plugin for WorldPlugin {
                 ),
             );
     }
+}
+
+#[derive(Resource)]
+pub struct AtlasHandle(Handle<Image>);
+
+fn load_assets(asset_server: Res<AssetServer>, mut commands: Commands) {
+    let handle = asset_server.load("blocks.png");
+    commands.insert_resource(AtlasHandle(handle));
 }

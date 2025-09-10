@@ -15,7 +15,7 @@ pub struct ChunkGenerationTask(Task<ChunkVoxels>);
 
 #[derive(Component)]
 pub struct ChunkMeshTask {
-    task: Task<Mesh>,
+    task: Task<Option<Mesh>>,
     voxel_version: u32,
 }
 
@@ -108,16 +108,16 @@ pub fn complete_mesh_tasks(
 ) {
     for (entity, mut task) in tasks.iter_mut() {
         if let Some(mesh) = future::block_on(future::poll_once(&mut task.task)) {
-            let handle = meshes.add(mesh);
-            let version = task.voxel_version;
-
             commands.entity(entity).remove::<ChunkMeshTask>();
 
-            ready_events.write(ChunkMeshReady {
-                entity,
-                mesh: handle,
-                voxel_version: version,
-            });
+            if let Some(mesh) = mesh {
+                let handle = meshes.add(mesh);
+                ready_events.write(ChunkMeshReady {
+                    entity,
+                    mesh: handle,
+                    voxel_version: task.voxel_version,
+                });
+            }
         }
     }
 }
@@ -149,13 +149,11 @@ pub fn render_chunks(
     mut commands: Commands,
     changed_meshes: Query<(Entity, &ChunkMesh), Changed<ChunkMesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    asset_server: Res<AssetServer>,
+    atlas_handle: Res<AtlasHandle>,
 ) {
     for (entity, chunk_mesh) in changed_meshes.iter() {
-        let texture_handle = asset_server.load("blocks.png");
-
         let material = materials.add(StandardMaterial {
-            base_color_texture: Some(texture_handle),
+            base_color_texture: Some(atlas_handle.0.clone()),
             unlit: false,
             ..default()
         });

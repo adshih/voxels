@@ -97,7 +97,7 @@ impl CubeFace {
     }
 }
 
-pub fn generate_mesh(voxels: ChunkVoxels) -> Mesh {
+pub fn generate_mesh(voxels: ChunkVoxels) -> Option<Mesh> {
     let mut positions = Vec::new();
     let mut indices = Vec::new();
     let mut normals = Vec::new();
@@ -126,14 +126,20 @@ pub fn generate_mesh(voxels: ChunkVoxels) -> Mesh {
         }
     }
 
-    Mesh::new(
-        PrimitiveTopology::TriangleList,
-        RenderAssetUsages::default(),
+    if positions.is_empty() {
+        return None;
+    }
+
+    Some(
+        Mesh::new(
+            PrimitiveTopology::TriangleList,
+            RenderAssetUsages::default(),
+        )
+        .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uvs)
+        .with_inserted_indices(Indices::U32(indices)),
     )
-    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
-    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
-    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uvs)
-    .with_inserted_indices(Indices::U32(indices))
 }
 
 fn should_render_face(voxels: &ChunkVoxels, x: usize, y: usize, z: usize, face: CubeFace) -> bool {
