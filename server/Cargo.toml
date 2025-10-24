@@ -1,11 +1,8 @@
 [package]
-name = "client"
+name = "server"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-bevy = "0.16.1"
-bevy_fix_cursor_unlock_web = "0.1.2"
 net = { version = "0.1.0", path = "../net" }
-noise = "0.9.0"
 tokio = { version = "1.48.0", features = ["full"] }
