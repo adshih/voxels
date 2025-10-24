@@ -568,6 +568,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "bevy_fix_cursor_unlock_web"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "04da367e72200deb11be72eeea6582b6daea3bfe76d1e42216f272cc8531ef90"
+dependencies = [
+ "bevy",
+ "web-sys",
+]
+
+[[package]]
 name = "bevy_gilrs"
 version = "0.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1526,6 +1536,15 @@ dependencies = [
  "glob",
  "libc",
  "libloading",
+]
+
+[[package]]
+name = "client"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "bevy_fix_cursor_unlock_web",
+ "noise",
 ]
 
 [[package]]
@@ -2806,6 +2825,10 @@ checksum = "ee6cda3051665f1fb8d9e08fc35c96d5a244fb1be711a03b71118828afc9a873"
 dependencies = [
  "jni-sys",
 ]
+
+[[package]]
+name = "net"
+version = "0.1.0"
 
 [[package]]
 name = "nix"
@@ -4210,18 +4233,6 @@ name = "version_check"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
-
-[[package]]
-name = "voxel-client"
-version = "0.1.0"
-dependencies = [
- "bevy",
- "noise",
-]
-
-[[package]]
-name = "voxel-net"
-version = "0.1.0"
 
 [[package]]
 name = "walkdir"
