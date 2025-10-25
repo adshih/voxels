@@ -3,12 +3,13 @@ use bevy::prelude::*;
 pub const MOVEMENT_SPEED: f32 = 10.0;
 pub const SPRINT_MULTIPLIER: f32 = 2.0;
 
-#[derive(Debug, Copy, Clone, Component)]
+#[derive(Default, Debug, Copy, Clone, Component)]
 pub struct PlayerInput {
     pub forward: f32,
     pub right: f32,
     pub up: f32,
     pub sprint: bool,
+    pub camera_forward: Vec3,
 }
 
 pub fn calculate_movement(

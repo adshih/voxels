@@ -1,5 +1,6 @@
 use std::io::{self, Cursor, Read, Write};
 
+use bevy::math::Vec3;
 use shared::PlayerInput;
 
 const MSG_CONNECT: u8 = 0x01;
@@ -37,6 +38,7 @@ pub enum Message {
         x: f32,
         y: f32,
         z: f32,
+        camera_forward: Vec3,
     },
 }
 
@@ -80,13 +82,26 @@ impl Message {
                 buf.write_all(&input.right.to_le_bytes())?;
                 buf.write_all(&input.up.to_le_bytes())?;
                 buf.write_all(&[input.sprint as u8])?;
+
+                buf.write_all(&input.camera_forward.x.to_le_bytes())?;
+                buf.write_all(&input.camera_forward.y.to_le_bytes())?;
+                buf.write_all(&input.camera_forward.z.to_le_bytes())?;
             }
-            Message::PositionUpdate { client_id, x, y, z } => {
+            Message::PositionUpdate {
+                client_id,
+                x,
+                y,
+                z,
+                camera_forward,
+            } => {
                 buf.write_all(&[MSG_POSITION_UPDATE])?;
                 buf.write_all(&client_id.to_le_bytes())?;
                 buf.write_all(&x.to_le_bytes())?;
                 buf.write_all(&y.to_le_bytes())?;
                 buf.write_all(&z.to_le_bytes())?;
+                buf.write_all(&camera_forward.x.to_le_bytes())?;
+                buf.write_all(&camera_forward.y.to_le_bytes())?;
+                buf.write_all(&camera_forward.z.to_le_bytes())?;
             }
         }
 
@@ -172,12 +187,26 @@ impl Message {
                 let mut sprint = [0u8; 1];
                 cursor.read_exact(&mut sprint)?;
 
+                let mut camera_x = [0u8; 4];
+                cursor.read_exact(&mut camera_x)?;
+
+                let mut camera_y = [0u8; 4];
+                cursor.read_exact(&mut camera_y)?;
+
+                let mut camera_z = [0u8; 4];
+                cursor.read_exact(&mut camera_z)?;
+
                 Ok(Message::Input {
                     input: PlayerInput {
                         forward: f32::from_le_bytes(forward_bytes),
                         right: f32::from_le_bytes(right_bytes),
                         up: f32::from_le_bytes(up_bytes),
                         sprint: sprint[0] != 0,
+                        camera_forward: Vec3::new(
+                            f32::from_le_bytes(camera_x),
+                            f32::from_le_bytes(camera_y),
+                            f32::from_le_bytes(camera_z),
+                        ),
                     },
                 })
             }
@@ -194,11 +223,25 @@ impl Message {
                 let mut z_bytes = [0u8; 4];
                 cursor.read_exact(&mut z_bytes)?;
 
+                let mut camera_x = [0u8; 4];
+                cursor.read_exact(&mut camera_x)?;
+
+                let mut camera_y = [0u8; 4];
+                cursor.read_exact(&mut camera_y)?;
+
+                let mut camera_z = [0u8; 4];
+                cursor.read_exact(&mut camera_z)?;
+
                 Ok(Message::PositionUpdate {
                     client_id: u32::from_le_bytes(id_bytes),
                     x: f32::from_le_bytes(x_bytes),
                     y: f32::from_le_bytes(y_bytes),
                     z: f32::from_le_bytes(z_bytes),
+                    camera_forward: Vec3::new(
+                        f32::from_le_bytes(camera_x),
+                        f32::from_le_bytes(camera_y),
+                        f32::from_le_bytes(camera_z),
+                    ),
                 })
             }
             _ => Err(io::Error::new(

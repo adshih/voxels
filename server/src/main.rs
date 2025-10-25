@@ -1,17 +1,24 @@
+use bevy::math::Vec3;
 use net::Message;
+use shared::{PlayerInput, calculate_movement};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::time::{Duration, Instant};
 use tokio::net::UdpSocket;
+use tokio::time::interval;
 
 const TIMEOUT_DURATION: Duration = Duration::from_secs(5);
 
-#[allow(dead_code)]
+const TICK_RATE_MS: u64 = 50;
+const TICK_DELTA: f32 = TICK_RATE_MS as f32 / 1000.0;
+
 struct ClientInfo {
     addr: SocketAddr,
     id: u32,
     name: String,
     last_seen: Instant,
+    position: Vec3,
+    latest_input: PlayerInput,
 }
 
 struct Server {
@@ -37,16 +44,49 @@ impl Server {
     }
 
     async fn run(&mut self) -> std::io::Result<()> {
+        let mut timeout_check = interval(Duration::from_secs(1));
+        let mut simulation_tick = interval(Duration::from_millis(TICK_RATE_MS));
+
         loop {
-            let (len, addr) = self.socket.recv_from(&mut self.buf).await?;
+            tokio::select! {
+                result = self.socket.recv_from(&mut self.buf) => {
+                    let (len, addr) = result?;
+                    match Message::deserialize(&self.buf[..len]) {
+                        Ok(msg) => self.handle_message(msg, addr).await?,
+                        Err(e) => println!("Failed to parse message from {}: {}", addr, e),
+                    }
+                }
 
-            match Message::deserialize(&self.buf[..len]) {
-                Ok(msg) => self.handle_message(msg, addr).await?,
-                Err(e) => println!("Failed to parse message from {}: {}", addr, e),
+                _ = timeout_check.tick() => {
+                    self.check_timeouts().await?;
+                }
+
+                _ = simulation_tick.tick() => {
+                    self.simulate_world(TICK_DELTA).await?;
+                }
             }
-
-            self.check_timeouts().await?;
         }
+    }
+
+    async fn simulate_world(&mut self, delta_time: f32) -> std::io::Result<()> {
+        for client in self.clients.values_mut() {
+            let forward = client.latest_input.camera_forward;
+            client.position =
+                calculate_movement(&client.latest_input, client.position, forward, delta_time);
+        }
+
+        for client in self.clients.values() {
+            let pos_update = Message::PositionUpdate {
+                client_id: client.id,
+                x: client.position.x,
+                y: client.position.y,
+                z: client.position.z,
+                camera_forward: client.latest_input.camera_forward,
+            };
+            self.broadcast(&pos_update).await?;
+        }
+
+        Ok(())
     }
 
     async fn handle_message(&mut self, msg: Message, addr: SocketAddr) -> std::io::Result<()> {
@@ -57,6 +97,14 @@ impl Server {
             Message::Disconnect => {
                 if let Some(id) = self.addr_to_id.get(&addr) {
                     self.remove_client(*id).await?;
+                }
+            }
+            Message::Input { input } => {
+                if let Some(id) = self.addr_to_id.get(&addr) {
+                    if let Some(client) = self.clients.get_mut(id) {
+                        client.last_seen = Instant::now();
+                        client.latest_input = input;
+                    }
                 }
             }
             _ => {
@@ -80,6 +128,16 @@ impl Server {
         let ack = Message::ConnectAck { client_id };
         self.send_to(&ack, addr).await?;
 
+        // Send existing players to new client.
+        // TODO: send this information in a WorldState message
+        for existing_client in self.clients.values() {
+            let player_joined = Message::PlayerJoined {
+                client_id: existing_client.id,
+                name: existing_client.name.clone(),
+            };
+            self.send_to(&player_joined, addr).await?;
+        }
+
         let joined_msg = Message::PlayerJoined {
             client_id,
             name: name.clone(),
@@ -93,6 +151,8 @@ impl Server {
                 id: client_id,
                 name,
                 last_seen: Instant::now(),
+                position: Vec3::new(0.0, 60.0, 0.0),
+                latest_input: PlayerInput::default(),
             },
         );
         self.addr_to_id.insert(addr, client_id);

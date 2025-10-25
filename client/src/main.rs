@@ -22,21 +22,18 @@ enum Systems {
     PostMovement,
 }
 
-#[derive(Resource)]
+#[derive(Default, Debug, Resource)]
 struct Settings {
     auto_lock_cursor: bool,
-}
-
-impl Default for Settings {
-    fn default() -> Self {
-        Self {
-            auto_lock_cursor: false,
-        }
-    }
+    multiplayer: bool,
 }
 
 fn main() {
-    let settings = Settings::default();
+    let settings = Settings {
+        auto_lock_cursor: false,
+        multiplayer: true,
+    };
+
     let cursor_options = CursorOptions {
         grab_mode: if settings.auto_lock_cursor {
             CursorGrabMode::Locked
@@ -47,41 +44,46 @@ fn main() {
         ..default()
     };
 
-    App::new()
-        .configure_sets(
-            Update,
-            (
-                Systems::Input.run_if(cursor_locked),
-                Systems::Movement.after(Systems::Input),
-                Systems::PostMovement.after(Systems::Movement),
-            ),
-        )
-        .add_plugins((
-            DefaultPlugins
-                .set(WindowPlugin {
-                    primary_window: Some(Window {
-                        cursor_options,
-                        fit_canvas_to_parent: true,
-                        prevent_default_event_handling: false,
-                        ..default()
-                    }),
-                    ..default()
-                })
-                .set(AssetPlugin {
-                    meta_check: AssetMetaCheck::Never,
+    let mut app = App::new();
+
+    if settings.multiplayer {
+        app.add_plugins(NetworkPlugin);
+    }
+
+    app.configure_sets(
+        Update,
+        (
+            Systems::Input.run_if(cursor_locked),
+            Systems::Movement.after(Systems::Input),
+            Systems::PostMovement.after(Systems::Movement),
+        ),
+    )
+    .add_plugins((
+        DefaultPlugins
+            .set(WindowPlugin {
+                primary_window: Some(Window {
+                    cursor_options,
+                    fit_canvas_to_parent: true,
+                    prevent_default_event_handling: false,
                     ..default()
                 }),
-            CameraPlugin,
-            DebugPlugin,
-            PlayerPlugin,
-            WorldPlugin,
-            FixPointerUnlockPlugin,
-            NetworkPlugin,
-        ))
-        .insert_resource(settings)
-        .add_systems(Startup, setup)
-        .add_systems(Update, toggle_cursor_lock)
-        .run();
+                ..default()
+            })
+            .set(AssetPlugin {
+                meta_check: AssetMetaCheck::Never,
+                ..default()
+            }),
+        CameraPlugin,
+        DebugPlugin,
+        PlayerPlugin,
+        WorldPlugin,
+        FixPointerUnlockPlugin,
+    ))
+    .insert_resource(settings)
+    .add_systems(Startup, setup)
+    .add_systems(Update, toggle_cursor_lock);
+
+    app.run();
 }
 
 fn setup(mut commands: Commands, mut window: Query<&mut Window>, settings: Res<Settings>) {

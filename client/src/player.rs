@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use shared::{PlayerInput, calculate_movement};
 
-use crate::Systems;
+use crate::{Systems, network::client::NetworkClient};
 
 #[derive(Component)]
 pub struct LocalPlayer {
@@ -22,7 +22,9 @@ impl Plugin for PlayerPlugin {
             Update,
             (
                 read_input.in_set(Systems::Input),
-                move_player.in_set(Systems::Movement),
+                move_player
+                    .in_set(Systems::Movement)
+                    .run_if(not(resource_exists::<NetworkClient>)),
             ),
         );
     }
@@ -34,12 +36,7 @@ fn spawn_player(mut commands: Commands) {
         LocalPlayer {
             name: "LocalPlayer".to_string(),
         },
-        PlayerInput {
-            forward: 0.0,
-            right: 0.0,
-            up: 0.0,
-            sprint: false,
-        },
+        PlayerInput::default(),
         Transform::from_xyz(0.0, 60.0, 0.0),
     ));
 }

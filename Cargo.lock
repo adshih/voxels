@@ -2864,6 +2864,7 @@ dependencies = [
 name = "net"
 version = "0.1.0"
 dependencies = [
+ "bevy",
  "shared",
 ]
 
@@ -3794,7 +3795,9 @@ dependencies = [
 name = "server"
 version = "0.1.0"
 dependencies = [
+ "bevy",
  "net",
+ "shared",
  "tokio",
 ]
 

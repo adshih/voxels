@@ -1,5 +1,6 @@
 use bevy::input::mouse::MouseMotion;
 use bevy::prelude::*;
+use shared::PlayerInput;
 
 use crate::Systems;
 use crate::player::LocalPlayer;
@@ -49,9 +50,13 @@ fn spawn_camera(mut commands: Commands) {
 fn camera_look(
     mut mouse_motion: EventReader<MouseMotion>,
     mut camera_query: Query<(&mut Camera, &mut Transform)>,
+    mut player_input_query: Query<&mut PlayerInput>,
     time: Res<Time>,
 ) {
     let (mut camera, mut transform) = camera_query.single_mut().expect("Could not find camera");
+    let mut player_input = player_input_query
+        .single_mut()
+        .expect("Could not find player input");
 
     for event in mouse_motion.read() {
         camera.yaw -= event.delta.x * camera.sensitivity * time.delta_secs();
@@ -66,6 +71,8 @@ fn camera_look(
         camera.pitch.to_radians(),
         0.0,
     );
+
+    player_input.camera_forward = transform.forward().into();
 }
 
 fn follow_player(
