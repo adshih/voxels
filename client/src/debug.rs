@@ -1,7 +1,7 @@
 use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use bevy::prelude::*;
 
-use crate::player::Player;
+use crate::player::LocalPlayer;
 use crate::world::ChunkManager;
 
 #[derive(Component)]
@@ -138,7 +138,7 @@ fn debug_performance(
 }
 
 fn debug_player_position(
-    player_query: Query<&Transform, With<Player>>,
+    player_query: Query<&Transform, With<LocalPlayer>>,
     mut debug_text: Query<&mut Text, With<PlayerText>>,
 ) {
     if let (Ok(player_transform), Ok(mut text)) = (player_query.single(), debug_text.single_mut()) {

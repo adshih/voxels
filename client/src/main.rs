@@ -1,5 +1,6 @@
 mod camera;
 mod debug;
+mod network;
 mod player;
 mod world;
 
@@ -7,6 +8,7 @@ use bevy::asset::AssetMetaCheck;
 use bevy_fix_cursor_unlock_web::FixPointerUnlockPlugin;
 use camera::CameraPlugin;
 use debug::DebugPlugin;
+use network::NetworkPlugin;
 use player::PlayerPlugin;
 use world::WorldPlugin;
 
@@ -74,6 +76,7 @@ fn main() {
             PlayerPlugin,
             WorldPlugin,
             FixPointerUnlockPlugin,
+            NetworkPlugin,
         ))
         .insert_resource(settings)
         .add_systems(Startup, setup)

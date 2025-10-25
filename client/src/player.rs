@@ -1,18 +1,17 @@
 use bevy::prelude::*;
+use shared::{PlayerInput, calculate_movement};
 
 use crate::Systems;
 
 #[derive(Component)]
-pub struct Player {
-    movement_speed: f32,
+pub struct LocalPlayer {
+    pub name: String,
 }
 
-impl Default for Player {
-    fn default() -> Self {
-        Self {
-            movement_speed: 10.0,
-        }
-    }
+#[derive(Component)]
+pub struct RemotePlayer {
+    pub id: u32,
+    pub name: String,
 }
 
 pub struct PlayerPlugin;
@@ -29,80 +28,68 @@ impl Plugin for PlayerPlugin {
     }
 }
 
-#[derive(Component, Default, Debug)]
-pub struct Input {
-    movement: Vec3,
-    sprint: bool,
-}
-
 fn spawn_player(mut commands: Commands) {
     commands.spawn((
         Name::new("Player"),
-        Player::default(),
-        Input::default(),
-        Transform::from_xyz(0.0, 30.0, 0.0),
+        LocalPlayer {
+            name: "LocalPlayer".to_string(),
+        },
+        PlayerInput {
+            forward: 0.0,
+            right: 0.0,
+            up: 0.0,
+            sprint: false,
+        },
+        Transform::from_xyz(0.0, 60.0, 0.0),
     ));
 }
 
 fn read_input(
     keyboard: Res<ButtonInput<KeyCode>>,
-    mut player_query: Query<&mut Input, With<Player>>,
+    mut player_query: Query<&mut PlayerInput, With<LocalPlayer>>,
 ) {
     let mut input = player_query.single_mut().expect("Could not find player");
 
-    input.movement = Vec3::ZERO;
+    input.forward = 0.0;
+    input.right = 0.0;
+    input.up = 0.0;
 
     if keyboard.pressed(KeyCode::KeyW) {
-        input.movement.z += 1.0;
+        input.forward += 1.0;
     }
     if keyboard.pressed(KeyCode::KeyS) {
-        input.movement.z -= 1.0;
-    }
-
-    if keyboard.pressed(KeyCode::KeyA) {
-        input.movement.x -= 1.0;
+        input.forward -= 1.0;
     }
     if keyboard.pressed(KeyCode::KeyD) {
-        input.movement.x += 1.0;
+        input.right += 1.0;
     }
-
+    if keyboard.pressed(KeyCode::KeyA) {
+        input.right -= 1.0;
+    }
     if keyboard.pressed(KeyCode::Space) {
-        input.movement.y += 1.0;
+        input.up += 1.0;
     }
     if keyboard.pressed(KeyCode::KeyC) {
-        input.movement.y -= 1.0;
+        input.up -= 1.0;
     }
 
     input.sprint = keyboard.pressed(KeyCode::ShiftLeft);
 }
 
 fn move_player(
-    mut player_query: Query<(&Player, &mut Transform, &Input), Without<Camera>>,
-    camera_query: Query<&Transform, (With<Camera>, Without<Player>)>,
+    mut player_query: Query<(&mut Transform, &PlayerInput), (With<LocalPlayer>, Without<Camera>)>,
+    camera_query: Query<&Transform, (With<Camera>, Without<LocalPlayer>)>,
     time: Res<Time>,
 ) {
-    let (player, mut transform, input) = player_query.single_mut().expect("Could not find player");
+    let (mut transform, input) = player_query.single_mut().expect("Could not find player");
     let camera_transform = camera_query.single().expect("Could not find camera");
 
-    if input.movement == Vec3::ZERO {
-        return;
-    }
+    let new_position = calculate_movement(
+        input,
+        transform.translation,
+        camera_transform.forward().into(),
+        time.delta_secs(),
+    );
 
-    let camera_forward = camera_transform.forward();
-    let camera_right = camera_transform.right();
-
-    let forward = Vec3::new(camera_forward.x, 0.0, camera_forward.z).normalize();
-    let right = Vec3::new(camera_right.x, 0.0, camera_right.z).normalize();
-
-    let mut velocity =
-        forward * input.movement.z + right * input.movement.x + Vec3::Y * input.movement.y;
-
-    let speed = if input.sprint {
-        player.movement_speed * 2.0
-    } else {
-        player.movement_speed
-    };
-
-    velocity = velocity.normalize_or_zero();
-    transform.translation += velocity * speed * time.delta_secs();
+    transform.translation = new_position;
 }

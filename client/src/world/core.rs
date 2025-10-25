@@ -3,9 +3,10 @@ use bevy::render::primitives::Aabb;
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, VecDeque};
 
+use crate::player::LocalPlayer;
+
 use super::WorldSettings;
 use super::events::*;
-use crate::player::Player;
 
 const VOXEL_SIZE: f32 = 1.0;
 
@@ -138,7 +139,7 @@ impl ChunkManager {
 pub fn queue_chunk_operations(
     mut chunk_manager: ResMut<ChunkManager>,
     world_settings: Res<WorldSettings>,
-    player_query: Query<&Transform, With<Player>>,
+    player_query: Query<&Transform, With<LocalPlayer>>,
 ) {
     let player_transform = player_query.single().expect("Could not find player");
     let player_chunk = ChunkCoord::from_world_pos(player_transform.translation);

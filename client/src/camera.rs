@@ -2,7 +2,7 @@ use bevy::input::mouse::MouseMotion;
 use bevy::prelude::*;
 
 use crate::Systems;
-use crate::player::Player;
+use crate::player::LocalPlayer;
 
 pub struct CameraPlugin;
 
@@ -70,7 +70,7 @@ fn camera_look(
 
 fn follow_player(
     mut camera_query: Query<&mut Transform, With<Camera>>,
-    player_query: Query<&Transform, (With<Player>, Without<Camera>)>,
+    player_query: Query<&Transform, (With<LocalPlayer>, Without<Camera>)>,
 ) {
     let mut camera_transform = camera_query.single_mut().expect("Could not find camera");
     let player_transform = player_query.single().expect("Could not find player");
