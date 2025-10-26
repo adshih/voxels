@@ -5,7 +5,6 @@ mod player;
 mod world;
 
 use bevy::asset::AssetMetaCheck;
-use bevy_fix_cursor_unlock_web::FixPointerUnlockPlugin;
 use camera::CameraPlugin;
 use debug::DebugPlugin;
 use network::NetworkPlugin;
@@ -13,7 +12,7 @@ use player::PlayerPlugin;
 use world::WorldPlugin;
 
 use bevy::prelude::*;
-use bevy::window::{CursorGrabMode, CursorOptions};
+use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow};
 
 #[derive(SystemSet, Debug, Clone, Hash, Eq, PartialEq)]
 enum Systems {
@@ -24,25 +23,11 @@ enum Systems {
 
 #[derive(Default, Debug, Resource)]
 struct Settings {
-    auto_lock_cursor: bool,
     multiplayer: bool,
 }
 
 fn main() {
-    let settings = Settings {
-        auto_lock_cursor: false,
-        multiplayer: true,
-    };
-
-    let cursor_options = CursorOptions {
-        grab_mode: if settings.auto_lock_cursor {
-            CursorGrabMode::Locked
-        } else {
-            CursorGrabMode::None
-        },
-        visible: !settings.auto_lock_cursor,
-        ..default()
-    };
+    let settings = Settings { multiplayer: true };
 
     let mut app = App::new();
 
@@ -53,7 +38,7 @@ fn main() {
     app.configure_sets(
         Update,
         (
-            Systems::Input.run_if(cursor_locked),
+            Systems::Input.run_if(is_cursor_locked),
             Systems::Movement.after(Systems::Input),
             Systems::PostMovement.after(Systems::Movement),
         ),
@@ -62,7 +47,6 @@ fn main() {
         DefaultPlugins
             .set(WindowPlugin {
                 primary_window: Some(Window {
-                    cursor_options,
                     fit_canvas_to_parent: true,
                     prevent_default_event_handling: false,
                     ..default()
@@ -77,7 +61,6 @@ fn main() {
         DebugPlugin,
         PlayerPlugin,
         WorldPlugin,
-        FixPointerUnlockPlugin,
     ))
     .insert_resource(settings)
     .add_systems(Startup, setup)
@@ -86,13 +69,7 @@ fn main() {
     app.run();
 }
 
-fn setup(mut commands: Commands, mut window: Query<&mut Window>, settings: Res<Settings>) {
-    if settings.auto_lock_cursor {
-        let mut window = window.single_mut().expect("Could not find window");
-        window.cursor_options.grab_mode = CursorGrabMode::Locked;
-        window.cursor_options.visible = false;
-    }
-
+fn setup(mut commands: Commands) {
     commands.spawn((
         Name::new("Light"),
         PointLight {
@@ -103,27 +80,23 @@ fn setup(mut commands: Commands, mut window: Query<&mut Window>, settings: Res<S
     ));
 }
 
-fn cursor_locked(window_query: Query<&Window>) -> bool {
-    if let Ok(window) = window_query.single() {
-        window.cursor_options.grab_mode == CursorGrabMode::Locked
-    } else {
-        false
-    }
+fn is_cursor_locked(primary_cursor_options: Single<&CursorOptions, With<PrimaryWindow>>) -> bool {
+    primary_cursor_options.grab_mode == CursorGrabMode::Locked
 }
 
-fn toggle_cursor_lock(mut window: Query<&mut Window>, keyboard: Res<ButtonInput<KeyCode>>) {
-    let mut window = window.single_mut().expect("Could not find window");
-    let cursor_options = &mut window.cursor_options;
-
+fn toggle_cursor_lock(
+    mut primary_cursor_options: Single<&mut CursorOptions, With<PrimaryWindow>>,
+    keyboard: Res<ButtonInput<KeyCode>>,
+) {
     if keyboard.just_pressed(KeyCode::Escape) {
-        match cursor_options.grab_mode {
+        match primary_cursor_options.grab_mode {
             CursorGrabMode::None => {
-                cursor_options.grab_mode = CursorGrabMode::Locked;
-                cursor_options.visible = false;
+                primary_cursor_options.grab_mode = CursorGrabMode::Locked;
+                primary_cursor_options.visible = false;
             }
             CursorGrabMode::Locked => {
-                cursor_options.grab_mode = CursorGrabMode::None;
-                cursor_options.visible = true;
+                primary_cursor_options.grab_mode = CursorGrabMode::None;
+                primary_cursor_options.visible = true;
             }
             _ => (),
         }

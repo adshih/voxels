@@ -48,15 +48,12 @@ fn spawn_camera(mut commands: Commands) {
 }
 
 fn camera_look(
-    mut mouse_motion: EventReader<MouseMotion>,
-    mut camera_query: Query<(&mut Camera, &mut Transform)>,
-    mut player_input_query: Query<&mut PlayerInput>,
+    mut mouse_motion: MessageReader<MouseMotion>,
+    camera: Single<(&mut Camera, &mut Transform)>,
+    mut player_input: Single<&mut PlayerInput>,
     time: Res<Time>,
 ) {
-    let (mut camera, mut transform) = camera_query.single_mut().expect("Could not find camera");
-    let mut player_input = player_input_query
-        .single_mut()
-        .expect("Could not find player input");
+    let (mut camera, mut transform) = camera.into_inner();
 
     for event in mouse_motion.read() {
         camera.yaw -= event.delta.x * camera.sensitivity * time.delta_secs();
@@ -76,11 +73,8 @@ fn camera_look(
 }
 
 fn follow_player(
-    mut camera_query: Query<&mut Transform, With<Camera>>,
-    player_query: Query<&Transform, (With<LocalPlayer>, Without<Camera>)>,
+    mut camera_transform: Single<&mut Transform, With<Camera>>,
+    player_transform: Single<&Transform, (With<LocalPlayer>, Without<Camera>)>,
 ) {
-    let mut camera_transform = camera_query.single_mut().expect("Could not find camera");
-    let player_transform = player_query.single().expect("Could not find player");
-
     camera_transform.translation = player_transform.translation;
 }

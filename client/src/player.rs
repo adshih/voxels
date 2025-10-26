@@ -3,11 +3,13 @@ use shared::{PlayerInput, calculate_movement};
 
 use crate::{Systems, network::client::NetworkClient};
 
+#[allow(dead_code)]
 #[derive(Component)]
 pub struct LocalPlayer {
     pub name: String,
 }
 
+#[allow(dead_code)]
 #[derive(Component)]
 pub struct RemotePlayer {
     pub id: u32,
@@ -43,10 +45,8 @@ fn spawn_player(mut commands: Commands) {
 
 fn read_input(
     keyboard: Res<ButtonInput<KeyCode>>,
-    mut player_query: Query<&mut PlayerInput, With<LocalPlayer>>,
+    mut input: Single<&mut PlayerInput, With<LocalPlayer>>,
 ) {
-    let mut input = player_query.single_mut().expect("Could not find player");
-
     input.forward = 0.0;
     input.right = 0.0;
     input.up = 0.0;
@@ -74,12 +74,11 @@ fn read_input(
 }
 
 fn move_player(
-    mut player_query: Query<(&mut Transform, &PlayerInput), (With<LocalPlayer>, Without<Camera>)>,
-    camera_query: Query<&Transform, (With<Camera>, Without<LocalPlayer>)>,
+    player: Single<(&mut Transform, &PlayerInput), (With<LocalPlayer>, Without<Camera>)>,
+    camera_transform: Single<&Transform, (With<Camera>, Without<LocalPlayer>)>,
     time: Res<Time>,
 ) {
-    let (mut transform, input) = player_query.single_mut().expect("Could not find player");
-    let camera_transform = camera_query.single().expect("Could not find camera");
+    let (mut transform, input) = player.into_inner();
 
     let new_position = calculate_movement(
         input,

@@ -26,10 +26,10 @@ pub fn handle_network_events(
     mut commands: Commands,
     mut network: ResMut<NetworkClient>,
     mut players: ResMut<PlayerEntities>,
-    local_id: Option<Res<LocalClientId>>,
-    mut local_player_query: Query<&mut Transform, With<LocalPlayer>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    local_id: Option<Res<LocalClientId>>,
+    mut local_player_transform: Single<&mut Transform, With<LocalPlayer>>,
 ) {
     while let Ok(msg) = network.event_rx.try_recv() {
         match msg {
@@ -75,9 +75,7 @@ pub fn handle_network_events(
             } => {
                 if let Some(local) = &local_id {
                     if local.0 == client_id {
-                        if let Ok(mut transform) = local_player_query.single_mut() {
-                            transform.translation = Vec3::new(x, y, z);
-                        }
+                        local_player_transform.translation = Vec3::new(x, y, z);
                         continue;
                     }
                 }
@@ -93,12 +91,7 @@ pub fn handle_network_events(
     }
 }
 
-pub fn send_input(
-    network: Res<NetworkClient>,
-    input_query: Query<&PlayerInput, With<LocalPlayer>>,
-) {
-    if let Ok(input) = input_query.single() {
-        let msg = Message::Input { input: *input };
-        let _ = network.command_tx.send(msg);
-    }
+pub fn send_input(network: Res<NetworkClient>, input: Single<&PlayerInput, With<LocalPlayer>>) {
+    let msg = Message::Input { input: **input };
+    let _ = network.command_tx.send(msg);
 }

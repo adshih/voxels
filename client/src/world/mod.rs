@@ -38,10 +38,10 @@ impl Plugin for WorldPlugin {
         app.init_resource::<WorldSettings>()
             .init_resource::<ChunkManager>()
             .init_resource::<TerrainNoise>()
-            .add_event::<ChunkNeedsGeneration>()
-            .add_event::<ChunkVoxelsReady>()
-            .add_event::<ChunkNeedsMesh>()
-            .add_event::<ChunkMeshReady>()
+            .add_message::<ChunkNeedsGeneration>()
+            .add_message::<ChunkVoxelsReady>()
+            .add_message::<ChunkNeedsMesh>()
+            .add_message::<ChunkMeshReady>()
             .configure_sets(
                 Update,
                 (

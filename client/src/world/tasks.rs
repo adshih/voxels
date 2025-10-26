@@ -21,7 +21,7 @@ pub struct ChunkMeshTask {
 
 pub fn start_generation_tasks(
     mut commands: Commands,
-    mut events: EventReader<ChunkNeedsGeneration>,
+    mut events: MessageReader<ChunkNeedsGeneration>,
     active_tasks: Query<&ChunkGenerationTask>,
     terrain_noise: Res<TerrainNoise>,
 ) {
@@ -45,37 +45,33 @@ pub fn start_generation_tasks(
 
 pub fn complete_generation_tasks(
     mut commands: Commands,
-    mut tasks: Query<(Entity, &mut ChunkGenerationTask, &Chunk)>,
-    mut ready_events: EventWriter<ChunkVoxelsReady>,
+    mut tasks: Query<(Entity, &mut ChunkGenerationTask), With<Chunk>>,
+    mut ready_events: MessageWriter<ChunkVoxelsReady>,
 ) {
-    for (entity, mut task, chunk) in tasks.iter_mut() {
+    for (entity, mut task) in tasks.iter_mut() {
         if let Some(voxels) = future::block_on(future::poll_once(&mut task.0)) {
             commands.entity(entity).remove::<ChunkGenerationTask>();
             commands.entity(entity).insert(voxels);
 
-            ready_events.write(ChunkVoxelsReady {
-                entity,
-                coord: chunk.coord,
-            });
+            ready_events.write(ChunkVoxelsReady { entity });
         }
     }
 }
 
 pub fn route_voxels_to_mesh(
-    mut voxel_events: EventReader<ChunkVoxelsReady>,
-    mut mesh_events: EventWriter<ChunkNeedsMesh>,
+    mut voxel_events: MessageReader<ChunkVoxelsReady>,
+    mut mesh_events: MessageWriter<ChunkNeedsMesh>,
 ) {
     for event in voxel_events.read() {
         mesh_events.write(ChunkNeedsMesh {
             entity: event.entity,
-            coord: event.coord,
         });
     }
 }
 
 pub fn start_mesh_tasks(
     mut commands: Commands,
-    mut events: EventReader<ChunkNeedsMesh>,
+    mut events: MessageReader<ChunkNeedsMesh>,
     chunks: Query<&ChunkVoxels, Without<ChunkMeshTask>>,
     active_tasks: Query<&ChunkMeshTask>,
 ) {
@@ -103,7 +99,7 @@ pub fn start_mesh_tasks(
 pub fn complete_mesh_tasks(
     mut commands: Commands,
     mut tasks: Query<(Entity, &mut ChunkMeshTask)>,
-    mut ready_events: EventWriter<ChunkMeshReady>,
+    mut ready_events: MessageWriter<ChunkMeshReady>,
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
     for (entity, mut task) in tasks.iter_mut() {
@@ -124,12 +120,12 @@ pub fn complete_mesh_tasks(
 
 pub fn validate_mesh_versions(
     mut commands: Commands,
-    mut events: EventReader<ChunkMeshReady>,
-    chunks: Query<(&Chunk, &ChunkVoxels)>,
-    mut mesh_events: EventWriter<ChunkNeedsMesh>,
+    mut events: MessageReader<ChunkMeshReady>,
+    voxels: Query<&ChunkVoxels, With<Chunk>>,
+    mut mesh_events: MessageWriter<ChunkNeedsMesh>,
 ) {
     for event in events.read() {
-        if let Ok((chunk, voxels)) = chunks.get(event.entity) {
+        if let Ok(voxels) = voxels.get(event.entity) {
             if event.voxel_version == voxels.version {
                 commands.entity(event.entity).insert(ChunkMesh {
                     handle: event.mesh.clone(),
@@ -138,7 +134,6 @@ pub fn validate_mesh_versions(
             } else {
                 mesh_events.write(ChunkNeedsMesh {
                     entity: event.entity,
-                    coord: chunk.coord,
                 });
             }
         }

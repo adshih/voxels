@@ -1,8 +1,8 @@
 use super::*;
 use bevy::{
     asset::RenderAssetUsages,
+    mesh::{Indices, PrimitiveTopology},
     prelude::*,
-    render::mesh::{Indices, PrimitiveTopology},
 };
 
 const CUBE_FACES: [CubeFace; 6] = [

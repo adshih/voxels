@@ -1,5 +1,5 @@
+use bevy::camera::primitives::Aabb;
 use bevy::prelude::*;
-use bevy::render::primitives::Aabb;
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, VecDeque};
 
@@ -50,6 +50,7 @@ impl ChunkCoord {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Component)]
 pub struct Chunk {
     pub coord: ChunkCoord,
@@ -95,6 +96,7 @@ impl ChunkVoxels {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Component)]
 pub struct ChunkMesh {
     pub handle: Handle<Mesh>,
@@ -139,11 +141,10 @@ impl ChunkManager {
 pub fn queue_chunk_operations(
     mut chunk_manager: ResMut<ChunkManager>,
     world_settings: Res<WorldSettings>,
-    player_query: Query<&Transform, With<LocalPlayer>>,
+    local_player_transform: Single<&Transform, With<LocalPlayer>>,
 ) {
-    let player_transform = player_query.single().expect("Could not find player");
-    let player_chunk = ChunkCoord::from_world_pos(player_transform.translation);
-    let player_pos = player_transform.translation;
+    let player_chunk = ChunkCoord::from_world_pos(local_player_transform.translation);
+    let player_pos = local_player_transform.translation;
     let render_distance = world_settings.render_distance as i32;
 
     let mut chunks_to_load = Vec::new();
@@ -195,7 +196,7 @@ pub fn queue_chunk_operations(
 pub fn process_chunk_operations(
     mut commands: Commands,
     mut chunk_manager: ResMut<ChunkManager>,
-    mut generation_events: EventWriter<ChunkNeedsGeneration>,
+    mut generation_events: MessageWriter<ChunkNeedsGeneration>,
 ) {
     let batch: Vec<_> = chunk_manager
         .pending_ops
