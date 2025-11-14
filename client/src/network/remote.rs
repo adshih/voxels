@@ -1,6 +1,5 @@
-use bevy::ecs::resource::Resource;
-
-use net::Message;
+use shared::Message;
+use tokio::runtime::Runtime;
 
 use std::io;
 use std::sync::Arc;
@@ -9,14 +8,15 @@ use std::time::Duration;
 use tokio::net::UdpSocket;
 use tokio::sync::mpsc;
 
-#[derive(Resource)]
-pub struct NetworkClient {
-    pub command_tx: mpsc::UnboundedSender<Message>,
-    pub event_rx: mpsc::UnboundedReceiver<Message>,
+use super::Server;
+
+struct RemoteServer {
+    command_tx: mpsc::UnboundedSender<Message>,
+    event_rx: mpsc::UnboundedReceiver<Message>,
 }
 
-impl NetworkClient {
-    pub async fn connect(server_addr: &str, player_name: String) -> io::Result<Self> {
+impl RemoteServer {
+    async fn connect(server_addr: &str, player_name: String) -> io::Result<Self> {
         let socket = UdpSocket::bind("0.0.0.0:0").await?;
         socket.connect(server_addr).await?;
         let socket = Arc::new(socket);
@@ -29,11 +29,22 @@ impl NetworkClient {
 
         tokio::spawn(network_task(socket, command_rx, event_tx));
 
-        Ok(NetworkClient {
+        Ok(RemoteServer {
             command_tx,
             event_rx,
         })
     }
+}
+
+pub fn create_remote_server(
+    server_addr: &str,
+    player_name: String,
+) -> io::Result<(Server, Runtime)> {
+    let rt = Runtime::new()?;
+
+    let remote = rt.block_on(async { RemoteServer::connect(server_addr, player_name).await })?;
+
+    Ok((Server::new(remote.command_tx, remote.event_rx), rt))
 }
 
 async fn network_task(

@@ -31,10 +31,6 @@ fn main() {
 
     let mut app = App::new();
 
-    if settings.multiplayer {
-        app.add_plugins(NetworkPlugin);
-    }
-
     app.configure_sets(
         Update,
         (
@@ -61,6 +57,7 @@ fn main() {
         DebugPlugin,
         PlayerPlugin,
         WorldPlugin,
+        NetworkPlugin,
     ))
     .insert_resource(settings)
     .add_systems(Startup, setup)

@@ -1,5 +1,5 @@
 use bevy::math::Vec3;
-use net::Message;
+use shared::Message;
 use shared::{PlayerInput, calculate_movement};
 use std::collections::HashMap;
 use std::net::SocketAddr;

@@ -1725,7 +1725,6 @@ name = "client"
 version = "0.1.0"
 dependencies = [
  "bevy",
- "net",
  "noise",
  "shared",
  "tokio",
@@ -3053,14 +3052,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "net"
-version = "0.1.0"
-dependencies = [
- "bevy",
- "shared",
-]
-
-[[package]]
 name = "nix"
 version = "0.30.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4041,7 +4032,6 @@ name = "server"
 version = "0.1.0"
 dependencies = [
  "bevy",
- "net",
  "shared",
  "tokio",
 ]
