@@ -4,6 +4,7 @@ use bevy::{
     mesh::{Indices, PrimitiveTopology},
     prelude::*,
 };
+use voxel_core::Voxel;
 
 const CUBE_FACES: [CubeFace; 6] = [
     CubeFace::Front,
@@ -106,8 +107,10 @@ pub fn generate_mesh(voxels: ChunkVoxels) -> Option<Mesh> {
     for x in 0..CHUNK_SIZE {
         for y in 0..CHUNK_SIZE {
             for z in 0..CHUNK_SIZE {
-                let voxel = voxels.get(x, y, z);
-                if voxel.is_solid() {
+                let pos = UVec3::new(x as u32, y as u32, z as u32);
+
+                let voxel = voxels.data.get(pos);
+                if !voxel.is_empty() {
                     for face in CUBE_FACES {
                         if should_render_face(&voxels, x, y, z, face) {
                             add_face_to_mesh(
@@ -158,12 +161,10 @@ fn should_render_face(voxels: &ChunkVoxels, x: usize, y: usize, z: usize, face: 
         return true;
     }
 
-    let neighbor_voxel = voxels.get(
-        neighbor_x as usize,
-        neighbor_y as usize,
-        neighbor_z as usize,
-    );
-    !neighbor_voxel.is_solid()
+    let pos = UVec3::new(neighbor_x as u32, neighbor_y as u32, neighbor_z as u32);
+
+    let neighbor_voxel = voxels.data.get(pos);
+    neighbor_voxel.is_empty()
 }
 
 fn add_face_to_mesh(
@@ -173,7 +174,7 @@ fn add_face_to_mesh(
     uvs: &mut Vec<[f32; 2]>,
     pos: [f32; 3],
     face: CubeFace,
-    voxel_type: VoxelType,
+    voxel_type: Voxel,
 ) {
     let base_index = positions.len() as u32;
     let vertices = face.vertices(pos);
@@ -205,11 +206,11 @@ fn add_face_to_mesh(
     ]);
 }
 
-fn get_texture_coords(voxel_type: VoxelType) -> (f32, f32) {
+fn get_texture_coords(voxel_type: Voxel) -> (f32, f32) {
     match voxel_type {
-        VoxelType::STONE => (0.0 * TEXTURE_SIZE, 0.0 * TEXTURE_SIZE),
-        VoxelType::DIRT => (1.0 * TEXTURE_SIZE, 0.0 * TEXTURE_SIZE),
-        VoxelType::AIR => (0.0, 0.0),
+        Voxel::STONE => (0.0 * TEXTURE_SIZE, 0.0 * TEXTURE_SIZE),
+        Voxel::DIRT => (1.0 * TEXTURE_SIZE, 0.0 * TEXTURE_SIZE),
+        Voxel::EMPTY => (0.0, 0.0),
         _ => (15.0 * TEXTURE_SIZE, 15.0 * TEXTURE_SIZE),
     }
 }

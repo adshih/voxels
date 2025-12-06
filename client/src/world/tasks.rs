@@ -129,7 +129,6 @@ pub fn validate_mesh_versions(
             if event.voxel_version == voxels.version {
                 commands.entity(event.entity).insert(ChunkMesh {
                     handle: event.mesh.clone(),
-                    voxel_version: event.voxel_version,
                 });
             } else {
                 mesh_events.write(ChunkNeedsMesh {

@@ -5,5 +5,5 @@ edition = "2024"
 
 [dependencies]
 bevy = "0.17"
-shared = { version = "0.1.0", path = "../shared" }
 tokio = { version = "1.48.0", features = ["full"] }
+voxel-world = { version = "0.1.0", path = "../voxel-world" }

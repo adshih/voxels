@@ -1,10 +1,9 @@
-use super::ChunkCoord;
 use bevy::prelude::*;
 
 #[derive(Message)]
 pub struct ChunkNeedsGeneration {
     pub entity: Entity,
-    pub coord: ChunkCoord,
+    pub coord: IVec3,
 }
 
 #[derive(Message)]

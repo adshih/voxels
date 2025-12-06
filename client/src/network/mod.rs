@@ -1,10 +1,10 @@
 use bevy::prelude::*;
-use shared::Message;
 use std::collections::HashMap;
 use tokio::runtime::Runtime;
 use tokio::sync::mpsc;
 
-pub mod local;
+use server::Message;
+
 pub mod remote;
 mod systems;
 
@@ -16,24 +16,16 @@ pub struct PlayerEntities {
 #[derive(Resource)]
 pub struct LocalClientId(pub u32);
 
-#[allow(dead_code)]
 #[derive(Resource)]
-pub struct TokioRuntime(pub Runtime);
+pub struct TokioRuntime(#[allow(dead_code)] pub Runtime);
 
 #[derive(Resource)]
-pub struct Server {
+pub struct Connection {
     outgoing: mpsc::UnboundedSender<Message>,
     incoming: mpsc::UnboundedReceiver<Message>,
 }
 
-impl Server {
-    pub fn new(
-        outgoing: mpsc::UnboundedSender<Message>,
-        incoming: mpsc::UnboundedReceiver<Message>,
-    ) -> Self {
-        Self { outgoing, incoming }
-    }
-
+impl Connection {
     pub fn send(&self, msg: Message) {
         let _ = self.outgoing.send(msg);
     }
@@ -48,14 +40,10 @@ pub struct NetworkPlugin;
 impl Plugin for NetworkPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<PlayerEntities>()
-            .add_systems(Startup, systems::setup_server)
+            .add_systems(Startup, systems::setup_connection)
             .add_systems(
                 Update,
-                (
-                    local::run_local_simulation.run_if(resource_exists::<local::LocalServer>),
-                    systems::receive_updates,
-                    systems::send_player_input,
-                ),
+                (systems::receive_updates, systems::send_player_input),
             );
     }
 }

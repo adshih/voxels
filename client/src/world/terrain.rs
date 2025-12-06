@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use bevy::prelude::*;
 use noise::{core::perlin::perlin_2d, permutationtable::PermutationTable};
+use voxel_core::Voxel;
 
 use crate::world::*;
 
@@ -18,7 +19,7 @@ impl Default for TerrainNoise {
     }
 }
 
-pub fn generate_terrain(coord: ChunkCoord, noise_table: Arc<PermutationTable>) -> ChunkVoxels {
+pub fn generate_terrain(coord: IVec3, noise_table: Arc<PermutationTable>) -> ChunkVoxels {
     let mut voxels = ChunkVoxels::new();
 
     let scale = 0.02;
@@ -27,8 +28,8 @@ pub fn generate_terrain(coord: ChunkCoord, noise_table: Arc<PermutationTable>) -
 
     for x in 0..CHUNK_SIZE {
         for z in 0..CHUNK_SIZE {
-            let world_x = coord.0.x * CHUNK_SIZE as i32 + x as i32;
-            let world_z = coord.0.z * CHUNK_SIZE as i32 + z as i32;
+            let world_x = coord.x * CHUNK_SIZE as i32 + x as i32;
+            let world_z = coord.z * CHUNK_SIZE as i32 + z as i32;
 
             let noise_value = perlin_2d(
                 [world_x as f64 * scale, world_z as f64 * scale].into(),
@@ -38,17 +39,19 @@ pub fn generate_terrain(coord: ChunkCoord, noise_table: Arc<PermutationTable>) -
             let height_i = height as i32;
 
             for y in 0..CHUNK_SIZE {
-                let world_y = coord.0.y * CHUNK_SIZE as i32 + y as i32;
+                let world_y = coord.y * CHUNK_SIZE as i32 + y as i32;
 
                 let voxel_type = if world_y < height_i - 4 {
-                    VoxelType::STONE
+                    Voxel::STONE
                 } else if world_y < height_i {
-                    VoxelType::DIRT
+                    Voxel::DIRT
                 } else {
-                    VoxelType::AIR
+                    Voxel::EMPTY
                 };
 
-                voxels.set(x, y, z, voxel_type);
+                let pos = UVec3::new(x as u32, y as u32, z as u32);
+
+                voxels.data.set(pos, voxel_type);
             }
         }
     }

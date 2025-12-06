@@ -1,10 +1,10 @@
-mod core;
+mod chunk;
 mod events;
 mod mesh;
 mod tasks;
 mod terrain;
 
-pub use core::*;
+pub use chunk::*;
 pub use events::*;
 pub use mesh::*;
 use tasks::*;

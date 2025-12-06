@@ -1,37 +1,50 @@
 use bevy::prelude::*;
-use shared::{Message, PlayerInput};
 
-use crate::network::{LocalClientId, PlayerEntities, TokioRuntime};
+use server::{Message, Server};
+
+use crate::Settings;
+use crate::network::{Connection, LocalClientId, PlayerEntities, TokioRuntime, remote};
 use crate::player::{LocalPlayer, RemotePlayer};
 
-use super::Server;
-use super::local::create_local_server;
-use super::remote::create_remote_server;
+pub fn setup_connection(mut commands: Commands, settings: Res<Settings>) {
+    let addr = match &settings.server_addr {
+        Some(addr) => addr.parse().expect("Invalid server address"),
+        None => {
+            // Spawn embedded server
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            let server = rt
+                .block_on(Server::bind("127.0.0.1:0"))
+                .expect("Failed to bind server");
+            let addr = server.local_addr();
 
-pub fn setup_server(mut commands: Commands, settings: Res<crate::Settings>) {
-    if settings.multiplayer {
-        let (server, runtime) = create_remote_server("127.0.0.1:8080", "Player1".to_string())
-            .expect("Failed to connect to server");
+            std::thread::spawn(move || {
+                rt.block_on(async {
+                    let mut server = server;
+                    server.run().await.unwrap();
+                });
+            });
 
-        commands.insert_resource(server);
-        commands.insert_resource(TokioRuntime(runtime));
-    } else {
-        let (server, local_server) = create_local_server();
+            addr
+        }
+    };
 
-        commands.insert_resource(server);
-        commands.insert_resource(local_server);
-    }
+    let (connection, runtime) =
+        remote::connect(addr, settings.player_name.clone()).expect("Failed to connect");
+
+    commands.insert_resource(connection);
+    commands.insert_resource(TokioRuntime(runtime));
 }
+
 pub fn receive_updates(
     mut commands: Commands,
-    mut server: ResMut<Server>,
+    mut connection: ResMut<Connection>,
     mut players: ResMut<PlayerEntities>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     local_id: Option<Res<LocalClientId>>,
     mut local_player_transform: Single<&mut Transform, With<LocalPlayer>>,
 ) {
-    while let Some(msg) = server.try_recv() {
+    while let Some(msg) = connection.try_recv() {
         match msg {
             Message::ConnectAck { client_id } => {
                 println!("Connected with id: {}", client_id);
@@ -68,22 +81,20 @@ pub fn receive_updates(
             }
             Message::PositionUpdate {
                 client_id,
-                x,
-                y,
-                z,
-                camera_forward: _,
+                pos,
+                look: _,
             } => {
                 if let Some(local) = &local_id
                     && local.0 == client_id
                 {
-                    local_player_transform.translation = Vec3::new(x, y, z);
+                    local_player_transform.translation = pos;
                     continue;
                 }
 
                 if let Some(&entity) = players.map.get(&client_id)
                     && let Ok(mut entity_commands) = commands.get_entity(entity)
                 {
-                    entity_commands.insert(Transform::from_xyz(x, y, z));
+                    entity_commands.insert(Transform::from_translation(pos));
                 }
             }
             _ => {}
@@ -91,7 +102,8 @@ pub fn receive_updates(
     }
 }
 
-pub fn send_player_input(server: Res<Server>, input: Single<&PlayerInput, With<LocalPlayer>>) {
-    let msg = Message::Input { input: **input };
-    server.send(msg);
+pub fn send_player_input(connection: Res<Connection>, local_player: Single<&LocalPlayer>) {
+    connection.send(Message::Input {
+        input: local_player.input.clone(),
+    });
 }

@@ -2,140 +2,72 @@ use bevy::camera::primitives::Aabb;
 use bevy::prelude::*;
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, VecDeque};
+use voxel_core::VoxelBuffer;
 
 use crate::player::LocalPlayer;
 
 use super::WorldSettings;
 use super::events::*;
 
-const VOXEL_SIZE: f32 = 1.0;
-
-pub const CHUNK_SIZE: usize = 16;
-pub const CHUNK_VOLUME: usize = CHUNK_SIZE.pow(3);
-pub const CHUNK_WORLD_SIZE: f32 = CHUNK_SIZE as f32 * VOXEL_SIZE;
+pub const CHUNK_SIZE: usize = 32;
 
 const MAX_OPERATIONS_PER_FRAME: usize = 2;
 
-#[derive(Copy, Clone, Eq, PartialEq)]
-pub struct VoxelType(pub u8);
-
-impl VoxelType {
-    pub const AIR: VoxelType = VoxelType(0);
-    pub const DIRT: VoxelType = VoxelType(1);
-    pub const STONE: VoxelType = VoxelType(2);
-
-    pub fn is_solid(self) -> bool {
-        self != VoxelType::AIR
-    }
-}
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
-pub struct ChunkCoord(pub IVec3);
-
-impl ChunkCoord {
-    fn from_world_pos(pos: Vec3) -> Self {
-        Self(IVec3::new(
-            (pos.x / CHUNK_WORLD_SIZE).floor() as i32,
-            (pos.y / CHUNK_WORLD_SIZE).floor() as i32,
-            (pos.z / CHUNK_WORLD_SIZE).floor() as i32,
-        ))
-    }
-
-    fn _to_world_pos(self) -> Vec3 {
-        Vec3::new(
-            self.0.x as f32 * CHUNK_WORLD_SIZE,
-            self.0.y as f32 * CHUNK_WORLD_SIZE,
-            self.0.z as f32 * CHUNK_WORLD_SIZE,
-        )
-    }
-}
-
-#[allow(dead_code)]
 #[derive(Component)]
-pub struct Chunk {
-    pub coord: ChunkCoord,
-}
+pub struct Chunk;
 
 #[derive(Component, Clone)]
 pub struct ChunkVoxels {
-    pub data: Box<[VoxelType; CHUNK_VOLUME]>,
+    pub data: VoxelBuffer,
     pub version: u32,
 }
 
 impl ChunkVoxels {
     pub fn new() -> Self {
         Self {
-            data: Box::new([VoxelType::AIR; CHUNK_VOLUME]),
+            data: VoxelBuffer::new(UVec3::splat(CHUNK_SIZE as u32)),
             version: 1,
-        }
-    }
-
-    pub fn set(&mut self, x: usize, y: usize, z: usize, voxel_type: VoxelType) {
-        if let Some(i) = self.index(x, y, z)
-            && self.data[i] != voxel_type
-        {
-            self.data[i] = voxel_type;
-            self.version += 1;
-        }
-    }
-
-    pub fn get(&self, x: usize, y: usize, z: usize) -> VoxelType {
-        if let Some(i) = self.index(x, y, z) {
-            self.data[i]
-        } else {
-            VoxelType::AIR
-        }
-    }
-
-    fn index(&self, x: usize, y: usize, z: usize) -> Option<usize> {
-        if x < CHUNK_SIZE && y < CHUNK_SIZE && z < CHUNK_SIZE {
-            Some(x + y * CHUNK_SIZE + z * CHUNK_SIZE * CHUNK_SIZE)
-        } else {
-            None
         }
     }
 }
 
-#[allow(dead_code)]
 #[derive(Component)]
 pub struct ChunkMesh {
     pub handle: Handle<Mesh>,
-    pub voxel_version: u32,
 }
 
 #[derive(Copy, Clone, Debug)]
 pub enum ChunkOperation {
-    Load(ChunkCoord),
-    Unload(ChunkCoord),
+    Load(IVec3),
+    Unload(IVec3),
 }
 
-#[derive(Resource)]
+#[derive(Resource, Default)]
 pub struct ChunkManager {
     pub pending_ops: VecDeque<ChunkOperation>,
-    pub loaded_chunks: HashMap<ChunkCoord, Entity>,
-}
-
-impl Default for ChunkManager {
-    fn default() -> Self {
-        Self {
-            pending_ops: VecDeque::new(),
-            loaded_chunks: HashMap::new(),
-        }
-    }
+    pub loaded_chunks: HashMap<IVec3, Entity>,
 }
 
 impl ChunkManager {
-    fn queue_load(&mut self, coord: ChunkCoord) {
+    fn queue_load(&mut self, coord: IVec3) {
         if !self.loaded_chunks.contains_key(&coord) {
             self.pending_ops.push_back(ChunkOperation::Load(coord));
         }
     }
 
-    fn queue_unload(&mut self, coord: ChunkCoord) {
+    fn queue_unload(&mut self, coord: IVec3) {
         if self.loaded_chunks.contains_key(&coord) {
             self.pending_ops.push_back(ChunkOperation::Unload(coord));
         }
     }
+}
+
+fn from_world_pos(pos: Vec3) -> IVec3 {
+    IVec3::new(
+        (pos.x / CHUNK_SIZE as f32).floor() as i32,
+        (pos.y / CHUNK_SIZE as f32).floor() as i32,
+        (pos.z / CHUNK_SIZE as f32).floor() as i32,
+    )
 }
 
 pub fn queue_chunk_operations(
@@ -143,7 +75,7 @@ pub fn queue_chunk_operations(
     world_settings: Res<WorldSettings>,
     local_player_transform: Single<&Transform, With<LocalPlayer>>,
 ) {
-    let player_chunk = ChunkCoord::from_world_pos(local_player_transform.translation);
+    let player_chunk = from_world_pos(local_player_transform.translation);
     let player_pos = local_player_transform.translation;
     let render_distance = world_settings.render_distance as i32;
 
@@ -156,13 +88,12 @@ pub fn queue_chunk_operations(
                 let max_distance_sq = render_distance * render_distance;
 
                 if distance_sq <= max_distance_sq {
-                    let chunk_coord =
-                        ChunkCoord(IVec3::new(player_chunk.0.x + x, y, player_chunk.0.z + z));
+                    let chunk_coord = IVec3::new(player_chunk.x + x, y, player_chunk.z + z);
 
                     let chunk_world_pos = Vec3::new(
-                        chunk_coord.0.x as f32 * CHUNK_WORLD_SIZE,
-                        chunk_coord.0.y as f32 * CHUNK_WORLD_SIZE,
-                        chunk_coord.0.z as f32 * CHUNK_WORLD_SIZE,
+                        chunk_coord.x as f32 * CHUNK_SIZE as f32,
+                        chunk_coord.y as f32 * CHUNK_SIZE as f32,
+                        chunk_coord.z as f32 * CHUNK_SIZE as f32,
                     );
                     let distance = player_pos.distance(chunk_world_pos);
 
@@ -175,12 +106,12 @@ pub fn queue_chunk_operations(
     chunks_to_load.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
 
     let unload_distance = render_distance + 2;
-    let chunks_to_unload: Vec<ChunkCoord> = chunk_manager
+    let chunks_to_unload: Vec<IVec3> = chunk_manager
         .loaded_chunks
         .keys()
         .filter(|&&coord| {
-            let dx = coord.0.x - player_chunk.0.x;
-            let dz = coord.0.z - player_chunk.0.z;
+            let dx = coord.x - player_chunk.x;
+            let dz = coord.z - player_chunk.z;
 
             // let distance_sq = (coord.0 - player_chunk.0).length_squared();
 
@@ -217,12 +148,12 @@ pub fn process_chunk_operations(
                 if let Entry::Vacant(e) = chunk_manager.loaded_chunks.entry(coord) {
                     let entity = commands
                         .spawn((
-                            Chunk { coord },
-                            Aabb::from_min_max(Vec3::ZERO, Vec3::splat(CHUNK_WORLD_SIZE)),
+                            Chunk,
+                            Aabb::from_min_max(Vec3::ZERO, Vec3::splat(CHUNK_SIZE as f32)),
                             Transform::from_translation(Vec3::new(
-                                coord.0.x as f32 * CHUNK_WORLD_SIZE,
-                                coord.0.y as f32 * CHUNK_WORLD_SIZE,
-                                coord.0.z as f32 * CHUNK_WORLD_SIZE,
+                                coord.x as f32 * CHUNK_SIZE as f32,
+                                coord.y as f32 * CHUNK_SIZE as f32,
+                                coord.z as f32 * CHUNK_SIZE as f32,
                             )),
                         ))
                         .id();

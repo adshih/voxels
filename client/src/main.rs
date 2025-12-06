@@ -23,11 +23,15 @@ enum Systems {
 
 #[derive(Default, Debug, Resource)]
 struct Settings {
-    multiplayer: bool,
+    server_addr: Option<String>,
+    player_name: String,
 }
 
 fn main() {
-    let settings = Settings { multiplayer: false };
+    let settings = Settings {
+        server_addr: None,
+        player_name: "Player".to_string(),
+    };
 
     let mut app = App::new();
 

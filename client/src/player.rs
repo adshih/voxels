@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use shared::PlayerInput;
+use voxel_world::PlayerInput;
 
 use crate::Systems;
 
@@ -7,6 +7,7 @@ use crate::Systems;
 #[derive(Component)]
 pub struct LocalPlayer {
     pub name: String,
+    pub input: PlayerInput,
 }
 
 #[allow(dead_code)]
@@ -30,38 +31,35 @@ fn spawn_player(mut commands: Commands) {
         Name::new("Player"),
         LocalPlayer {
             name: "LocalPlayer".to_string(),
+            input: PlayerInput::default(),
         },
-        PlayerInput::default(),
         Transform::from_xyz(0.0, 60.0, 0.0),
     ));
 }
 
-fn read_input(
-    keyboard: Res<ButtonInput<KeyCode>>,
-    mut input: Single<&mut PlayerInput, With<LocalPlayer>>,
-) {
-    input.forward = 0.0;
-    input.right = 0.0;
-    input.up = 0.0;
+fn read_input(keyboard: Res<ButtonInput<KeyCode>>, mut local_player: Single<&mut LocalPlayer>) {
+    let mut input_dir = Vec3::ZERO;
+    let sprint = keyboard.pressed(KeyCode::ShiftLeft);
 
     if keyboard.pressed(KeyCode::KeyW) {
-        input.forward += 1.0;
+        input_dir.x += 1.0;
     }
     if keyboard.pressed(KeyCode::KeyS) {
-        input.forward -= 1.0;
+        input_dir.x -= 1.0;
     }
     if keyboard.pressed(KeyCode::KeyD) {
-        input.right += 1.0;
+        input_dir.z += 1.0;
     }
     if keyboard.pressed(KeyCode::KeyA) {
-        input.right -= 1.0;
+        input_dir.z -= 1.0;
     }
     if keyboard.pressed(KeyCode::Space) {
-        input.up += 1.0;
+        input_dir.y += 1.0;
     }
     if keyboard.pressed(KeyCode::KeyC) {
-        input.up -= 1.0;
+        input_dir.y -= 1.0;
     }
 
-    input.sprint = keyboard.pressed(KeyCode::ShiftLeft);
+    local_player.input.dir = input_dir;
+    local_player.input.sprint = sprint;
 }
