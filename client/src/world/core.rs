@@ -151,12 +151,13 @@ pub fn queue_chunk_operations(
 
     for x in -render_distance..=render_distance {
         for z in -render_distance..=render_distance {
-            for y in -2..=2 {
-                let distance_sq = x * x + z * z + y * y;
+            for y in 0..=15 {
+                let distance_sq = x * x + z * z;
                 let max_distance_sq = render_distance * render_distance;
 
                 if distance_sq <= max_distance_sq {
-                    let chunk_coord = ChunkCoord(player_chunk.0 + IVec3::new(x, y, z));
+                    let chunk_coord =
+                        ChunkCoord(IVec3::new(player_chunk.0.x + x, y, player_chunk.0.z + z));
 
                     let chunk_world_pos = Vec3::new(
                         chunk_coord.0.x as f32 * CHUNK_WORLD_SIZE,
@@ -178,7 +179,13 @@ pub fn queue_chunk_operations(
         .loaded_chunks
         .keys()
         .filter(|&&coord| {
-            let distance_sq = (coord.0 - player_chunk.0).length_squared();
+            let dx = coord.0.x - player_chunk.0.x;
+            let dz = coord.0.z - player_chunk.0.z;
+
+            // let distance_sq = (coord.0 - player_chunk.0).length_squared();
+
+            let distance_sq = dx * dx + dz * dz;
+
             distance_sq > (unload_distance * unload_distance)
         })
         .copied()

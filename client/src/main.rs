@@ -4,13 +4,13 @@ mod network;
 mod player;
 mod world;
 
-use bevy::asset::AssetMetaCheck;
 use camera::CameraPlugin;
 use debug::DebugPlugin;
 use network::NetworkPlugin;
 use player::PlayerPlugin;
 use world::WorldPlugin;
 
+use bevy::asset::AssetMetaCheck;
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow};
 
@@ -27,7 +27,7 @@ struct Settings {
 }
 
 fn main() {
-    let settings = Settings { multiplayer: true };
+    let settings = Settings { multiplayer: false };
 
     let mut app = App::new();
 
