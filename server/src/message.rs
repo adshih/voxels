@@ -1,4 +1,4 @@
-use bevy::prelude::*;
+use glam::Vec3;
 use std::io::{self, Cursor, Read, Write};
 use voxel_world::PlayerInput;
 
