@@ -4,6 +4,8 @@ mod network;
 mod player;
 mod world;
 
+use std::env;
+
 use camera::CameraPlugin;
 use debug::DebugPlugin;
 use network::NetworkPlugin;
@@ -27,12 +29,32 @@ struct Settings {
     player_name: String,
 }
 
-fn main() {
-    let settings = Settings {
-        server_addr: None,
-        player_name: "Player".to_string(),
-    };
+impl Settings {
+    pub fn from_args() -> Self {
+        let args: Vec<String> = env::args().collect();
 
+        let server_addr = args
+            .iter()
+            .position(|a| a == "--connect" || a == "-c")
+            .and_then(|i| args.get(i + 1))
+            .cloned();
+
+        let player_name = args
+            .iter()
+            .position(|a| a == "--name" || a == "-n")
+            .and_then(|i| args.get(i + 1))
+            .cloned()
+            .unwrap_or_else(|| "Player".to_string());
+
+        Self {
+            server_addr,
+            player_name,
+        }
+    }
+}
+
+fn main() {
+    let settings = Settings::from_args();
     let mut app = App::new();
 
     app.configure_sets(
