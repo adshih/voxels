@@ -5,6 +5,7 @@ mod player;
 mod world;
 
 use std::env;
+use std::f32::consts::PI;
 
 use camera::CameraPlugin;
 use debug::DebugPlugin;
@@ -94,12 +95,16 @@ fn main() {
 
 fn setup(mut commands: Commands) {
     commands.spawn((
-        Name::new("Light"),
-        PointLight {
+        DirectionalLight {
+            illuminance: light_consts::lux::OVERCAST_DAY,
             shadows_enabled: true,
             ..default()
         },
-        Transform::from_xyz(4.0, 8.0, 4.0),
+        Transform {
+            translation: Vec3::new(0.0, 2.0, 0.0),
+            rotation: Quat::from_rotation_x(-PI / 4.),
+            ..default()
+        },
     ));
 }
 
