@@ -8,6 +8,8 @@ use tokio::time::interval;
 use voxel_world::VoxelWorld;
 
 pub use message::Message;
+use voxel_world::commands::WorldCommand;
+use voxel_world::events::WorldEvent;
 
 const TICK_RATE: f32 = 60.0;
 const DT: f32 = 1.0 / TICK_RATE;
@@ -60,7 +62,10 @@ impl Server {
 
                 _ = tick.tick() => {
                     self.world.tick(DT);
-                    self.broadcast_state().await?;
+
+                    for event in self.world.drain_events() {
+                        self.handle_event(event).await?;
+                    }
                 }
 
                 _ = timeout_check.tick() => {
@@ -70,14 +75,16 @@ impl Server {
         }
     }
 
-    async fn broadcast_state(&self) -> std::io::Result<()> {
-        for (id, player) in self.world.players() {
-            self.broadcast(&Message::PositionUpdate {
-                client_id: *id,
-                pos: player.pos,
-                look: player.look,
-            })
-            .await?;
+    async fn handle_event(&self, event: WorldEvent) -> std::io::Result<()> {
+        match event {
+            WorldEvent::PlayerMoved { id, pos, look } => {
+                self.broadcast(&Message::PositionUpdate {
+                    client_id: id,
+                    pos,
+                    look,
+                })
+                .await?;
+            }
         }
 
         Ok(())
@@ -98,7 +105,7 @@ impl Server {
                     if let Some(client) = self.clients.get_mut(&id) {
                         client.last_seen = Instant::now();
                     }
-                    self.world.set_player_input(id, input);
+                    self.world.execute(WorldCommand::PlayerMove { id, input });
                 }
             }
             _ => {
@@ -114,7 +121,7 @@ impl Server {
     }
 
     async fn handle_connect(&mut self, name: String, addr: SocketAddr) -> std::io::Result<()> {
-        let id = self.world.new_player();
+        let id = self.world.add_player();
         println!("{} ({}) connected", name, id);
 
         self.send_to(&Message::ConnectAck { client_id: id }, addr)
