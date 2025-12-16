@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use voxel_world::PlayerInput;
+use voxel_world::player::PlayerInput;
 
 use crate::Systems;
 

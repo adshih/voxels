@@ -1,40 +1,17 @@
-use glam::{IVec3, Vec3};
+use glam::Vec3;
 use std::collections::HashMap;
 
 use crate::{
     commands::WorldCommand,
     events::WorldEvent,
+    player::{PlayerInput, PlayerState},
     terrain::{VoxelTerrain, world_to_chunk_pos},
 };
 
 pub mod commands;
 pub mod events;
+pub mod player;
 mod terrain;
-
-#[derive(Default, Debug, Clone)]
-pub struct PlayerInput {
-    pub dir: Vec3,
-    pub look: Vec3,
-    pub sprint: bool,
-}
-
-pub struct PlayerState {
-    pub pos: Vec3,
-    pub look: Vec3,
-    pub input: PlayerInput,
-    pub chunk_anchor: Option<IVec3>,
-}
-
-impl Default for PlayerState {
-    fn default() -> Self {
-        Self {
-            pos: Vec3::new(0.0, 60.0, 0.0),
-            look: Vec3::default(),
-            input: PlayerInput::default(),
-            chunk_anchor: None,
-        }
-    }
-}
 
 pub struct VoxelWorld {
     players: HashMap<u32, PlayerState>,

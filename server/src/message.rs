@@ -4,7 +4,7 @@ use std::{
     sync::Arc,
 };
 use voxel_core::{Voxel, VoxelBuffer};
-use voxel_world::PlayerInput;
+use voxel_world::player::PlayerInput;
 
 const MSG_CONNECT: u8 = 0x01;
 const MSG_CONNECT_ACK: u8 = 0x02;
