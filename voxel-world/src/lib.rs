@@ -1,11 +1,15 @@
 use glam::{IVec3, Vec3};
 use std::collections::HashMap;
-use voxel_core::VoxelBuffer;
 
-use crate::{commands::WorldCommand, events::WorldEvent};
+use crate::{
+    commands::WorldCommand,
+    events::WorldEvent,
+    terrain::{VoxelTerrain, world_to_chunk_pos},
+};
 
 pub mod commands;
 pub mod events;
+mod terrain;
 
 #[derive(Default, Debug, Clone)]
 pub struct PlayerInput {
@@ -18,6 +22,7 @@ pub struct PlayerState {
     pub pos: Vec3,
     pub look: Vec3,
     pub input: PlayerInput,
+    pub chunk_anchor: Option<IVec3>,
 }
 
 impl Default for PlayerState {
@@ -26,6 +31,7 @@ impl Default for PlayerState {
             pos: Vec3::new(0.0, 60.0, 0.0),
             look: Vec3::default(),
             input: PlayerInput::default(),
+            chunk_anchor: None,
         }
     }
 }
@@ -35,22 +41,20 @@ pub struct VoxelWorld {
     next_id: u32,
     tick: u64,
     events: Vec<WorldEvent>,
-    _chunks: HashMap<IVec3, VoxelBuffer>,
-    _seed: u64,
+    terrain: VoxelTerrain,
 }
 
 impl VoxelWorld {
     const MOVEMENT_SPEED: f32 = 10.0;
     const SPRINT_MULTIPLIER: f32 = 2.0;
 
-    pub fn new(seed: u64) -> Self {
+    pub fn new(seed: u32) -> Self {
         Self {
             players: HashMap::new(),
             tick: 0,
             next_id: 1,
             events: Vec::new(),
-            _chunks: HashMap::new(),
-            _seed: seed,
+            terrain: VoxelTerrain::new(seed),
         }
     }
 
@@ -69,6 +73,7 @@ impl VoxelWorld {
 
     pub fn tick(&mut self, dt: f32) {
         self.process_player_inputs(dt);
+        self.sync_player_chunks();
         self.tick += 1;
     }
 
@@ -84,6 +89,30 @@ impl VoxelWorld {
 
     pub fn drain_events(&mut self) -> Vec<WorldEvent> {
         std::mem::take(&mut self.events)
+    }
+
+    fn sync_player_chunks(&mut self) {
+        for (
+            id,
+            PlayerState {
+                pos, chunk_anchor, ..
+            },
+        ) in self.players.iter_mut()
+        {
+            let chunk_pos = world_to_chunk_pos(*pos);
+
+            if *chunk_anchor != Some(chunk_pos) {
+                *chunk_anchor = Some(chunk_pos);
+
+                for (pos, data) in self.terrain.load_chunks_around(chunk_pos) {
+                    self.events.push(WorldEvent::ChunkLoaded {
+                        for_player: *id,
+                        pos,
+                        data,
+                    })
+                }
+            }
+        }
     }
 
     fn process_player_inputs(&mut self, dt: f32) {

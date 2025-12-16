@@ -4065,6 +4065,7 @@ version = "0.1.0"
 dependencies = [
  "glam",
  "tokio",
+ "voxel-core",
  "voxel-world",
 ]
 
@@ -4667,6 +4668,7 @@ name = "voxel-world"
 version = "0.1.0"
 dependencies = [
  "glam",
+ "noise",
  "voxel-core",
 ]
 

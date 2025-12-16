@@ -1,6 +1,6 @@
 use glam::UVec3;
 
-#[derive(Copy, Clone, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct Voxel(pub u16);
 
 impl Voxel {
@@ -13,10 +13,10 @@ impl Voxel {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct VoxelBuffer {
-    size: UVec3,
-    voxels: Vec<Voxel>,
+    pub size: UVec3,
+    pub voxels: Vec<Voxel>,
 }
 
 impl VoxelBuffer {

@@ -1,5 +1,9 @@
-use glam::Vec3;
-use std::io::{self, Cursor, Read, Write};
+use glam::{IVec3, UVec3, Vec3};
+use std::{
+    io::{self, Cursor, Read, Write},
+    sync::Arc,
+};
+use voxel_core::{Voxel, VoxelBuffer};
 use voxel_world::PlayerInput;
 
 const MSG_CONNECT: u8 = 0x01;
@@ -10,6 +14,7 @@ const MSG_HEARTBEAT: u8 = 0x05;
 const MSG_DISCONNECT: u8 = 0x06;
 const MSG_INPUT: u8 = 0x07;
 const MSG_POSITION_UPDATE: u8 = 0x08;
+const MSG_CHUNK_LOADED: u8 = 0x09;
 
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -36,6 +41,11 @@ pub enum Message {
         client_id: u32,
         pos: Vec3,
         look: Vec3,
+    },
+    ChunkLoaded {
+        client_id: u32,
+        pos: IVec3,
+        data: Arc<VoxelBuffer>,
     },
 }
 
@@ -97,6 +107,23 @@ impl Message {
                 buf.write_all(&look.x.to_le_bytes())?;
                 buf.write_all(&look.y.to_le_bytes())?;
                 buf.write_all(&look.z.to_le_bytes())?;
+            }
+            Message::ChunkLoaded {
+                client_id,
+                pos,
+                data,
+            } => {
+                buf.write_all(&[MSG_CHUNK_LOADED])?;
+                buf.write_all(&client_id.to_le_bytes())?;
+                buf.write_all(&pos.x.to_le_bytes())?;
+                buf.write_all(&pos.y.to_le_bytes())?;
+                buf.write_all(&pos.z.to_le_bytes())?;
+                buf.write_all(&data.size.x.to_le_bytes())?;
+                buf.write_all(&data.size.y.to_le_bytes())?;
+                buf.write_all(&data.size.z.to_le_bytes())?;
+                for voxel in &data.voxels {
+                    buf.write_all(&voxel.0.to_le_bytes())?;
+                }
             }
         }
 
@@ -249,6 +276,50 @@ impl Message {
                     client_id: u32::from_le_bytes(id_bytes),
                     pos,
                     look,
+                })
+            }
+            MSG_CHUNK_LOADED => {
+                let mut id_bytes = [0u8; 4];
+                cursor.read_exact(&mut id_bytes)?;
+
+                let mut x_bytes = [0u8; 4];
+                cursor.read_exact(&mut x_bytes)?;
+                let mut y_bytes = [0u8; 4];
+                cursor.read_exact(&mut y_bytes)?;
+                let mut z_bytes = [0u8; 4];
+                cursor.read_exact(&mut z_bytes)?;
+                let pos = IVec3::new(
+                    i32::from_le_bytes(x_bytes),
+                    i32::from_le_bytes(y_bytes),
+                    i32::from_le_bytes(z_bytes),
+                );
+
+                let mut size_x = [0u8; 4];
+                cursor.read_exact(&mut size_x)?;
+                let mut size_y = [0u8; 4];
+                cursor.read_exact(&mut size_y)?;
+                let mut size_z = [0u8; 4];
+                cursor.read_exact(&mut size_z)?;
+                let size = UVec3::new(
+                    u32::from_le_bytes(size_x),
+                    u32::from_le_bytes(size_y),
+                    u32::from_le_bytes(size_z),
+                );
+
+                let voxel_count = (size.x * size.y * size.z) as usize;
+                let mut voxels = Vec::with_capacity(voxel_count);
+                for _ in 0..voxel_count {
+                    let mut voxel_bytes = [0u8; 2];
+                    cursor.read_exact(&mut voxel_bytes)?;
+                    voxels.push(Voxel(u16::from_le_bytes(voxel_bytes)));
+                }
+
+                let data = Arc::new(VoxelBuffer { size, voxels });
+
+                Ok(Message::ChunkLoaded {
+                    client_id: u32::from_le_bytes(id_bytes),
+                    pos,
+                    data,
                 })
             }
             _ => Err(io::Error::new(

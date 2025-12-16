@@ -85,6 +85,21 @@ impl Server {
                 })
                 .await?;
             }
+            WorldEvent::ChunkLoaded {
+                for_player,
+                pos,
+                data,
+            } => {
+                self.send_to(
+                    &Message::ChunkLoaded {
+                        client_id: for_player,
+                        pos,
+                        data,
+                    },
+                    self.clients[&for_player].addr,
+                )
+                .await?;
+            }
         }
 
         Ok(())
