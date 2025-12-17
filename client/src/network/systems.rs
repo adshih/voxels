@@ -97,6 +97,9 @@ pub fn receive_updates(
                     entity_commands.insert(Transform::from_translation(pos));
                 }
             }
+            Message::ChunkLoaded { pos, data } => {
+                println!("received chunk at pos: {:?}", pos);
+            }
             _ => {}
         }
     }

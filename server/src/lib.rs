@@ -91,11 +91,7 @@ impl Server {
                 data,
             } => {
                 self.send_to(
-                    &Message::ChunkLoaded {
-                        client_id: for_player,
-                        pos,
-                        data,
-                    },
+                    &Message::ChunkLoaded { pos, data },
                     self.clients[&for_player].addr,
                 )
                 .await?;

@@ -43,7 +43,6 @@ pub enum Message {
         look: Vec3,
     },
     ChunkLoaded {
-        client_id: u32,
         pos: IVec3,
         data: Arc<VoxelBuffer>,
     },
@@ -108,13 +107,8 @@ impl Message {
                 buf.write_all(&look.y.to_le_bytes())?;
                 buf.write_all(&look.z.to_le_bytes())?;
             }
-            Message::ChunkLoaded {
-                client_id,
-                pos,
-                data,
-            } => {
+            Message::ChunkLoaded { pos, data } => {
                 buf.write_all(&[MSG_CHUNK_LOADED])?;
-                buf.write_all(&client_id.to_le_bytes())?;
                 buf.write_all(&pos.x.to_le_bytes())?;
                 buf.write_all(&pos.y.to_le_bytes())?;
                 buf.write_all(&pos.z.to_le_bytes())?;
@@ -279,9 +273,6 @@ impl Message {
                 })
             }
             MSG_CHUNK_LOADED => {
-                let mut id_bytes = [0u8; 4];
-                cursor.read_exact(&mut id_bytes)?;
-
                 let mut x_bytes = [0u8; 4];
                 cursor.read_exact(&mut x_bytes)?;
                 let mut y_bytes = [0u8; 4];
@@ -316,11 +307,7 @@ impl Message {
 
                 let data = Arc::new(VoxelBuffer { size, voxels });
 
-                Ok(Message::ChunkLoaded {
-                    client_id: u32::from_le_bytes(id_bytes),
-                    pos,
-                    data,
-                })
+                Ok(Message::ChunkLoaded { pos, data })
             }
             _ => Err(io::Error::new(
                 io::ErrorKind::InvalidData,
