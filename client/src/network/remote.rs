@@ -1,6 +1,5 @@
 use tokio::runtime::Runtime;
 
-use std::io;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
@@ -12,7 +11,7 @@ use tokio::sync::mpsc;
 
 use super::Connection;
 
-pub fn connect(addr: SocketAddr, player_name: String) -> io::Result<(Connection, Runtime)> {
+pub fn connect(addr: SocketAddr, player_name: String) -> anyhow::Result<(Connection, Runtime)> {
     let rt = Runtime::new()?;
 
     let connection = rt.block_on(async {
@@ -23,11 +22,12 @@ pub fn connect(addr: SocketAddr, player_name: String) -> io::Result<(Connection,
         let (incoming_tx, incoming_rx) = mpsc::unbounded_channel();
 
         let connect_msg = Message::Connect { name: player_name };
-        socket.send(&connect_msg.serialize()?).await?;
+        let bytes = connect_msg.serialize()?;
+        socket.send(&bytes).await?;
 
         tokio::spawn(network_task(socket, outgoing_rx, incoming_tx));
 
-        Ok::<_, io::Error>(Connection {
+        Ok::<_, anyhow::Error>(Connection {
             outgoing: outgoing_tx,
             incoming: incoming_rx,
         })
@@ -72,13 +72,11 @@ async fn network_task(
             }
 
             Some(msg) = outgoing_rx.recv() => {
-                let is_disconnect = matches!(msg, Message::Disconnect);
-
                 if let Ok(bytes) = msg.serialize() {
                     let _ = socket.send(&bytes).await;
                 }
 
-                if is_disconnect {
+                if matches!(msg, Message::Disconnect) {
                     break;
                 }
             }

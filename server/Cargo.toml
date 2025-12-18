@@ -4,7 +4,12 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+anyhow = "1.0.100"
 glam = "0.30.9"
+postcard = { version = "1.1.3", features = ["alloc"] }
+quinn = "0.11.9"
+rcgen = "0.14.6"
+serde = { version = "1.0.228", features = ["derive", "rc"] }
 tokio = { version = "1.48.0", features = ["full"] }
 voxel-core = { version = "0.1.0", path = "../voxel-core" }
 voxel-world = { version = "0.1.0", path = "../voxel-world" }

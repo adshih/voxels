@@ -1,6 +1,7 @@
 use glam::UVec3;
+use serde::{Deserialize, Serialize};
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, Copy, Clone, Eq, PartialEq, Debug)]
 pub struct Voxel(pub u16);
 
 impl Voxel {
@@ -13,7 +14,7 @@ impl Voxel {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct VoxelBuffer {
     pub size: UVec3,
     pub voxels: Vec<Voxel>,

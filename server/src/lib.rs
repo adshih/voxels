@@ -1,10 +1,12 @@
 mod message;
 
+use glam::UVec3;
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::time::{Duration, Instant};
 use tokio::net::UdpSocket;
 use tokio::time::interval;
+use voxel_core::VoxelBuffer;
 use voxel_world::VoxelWorld;
 
 pub use message::Message;
@@ -47,7 +49,7 @@ impl Server {
         self.socket.local_addr().unwrap()
     }
 
-    pub async fn run(&mut self) -> std::io::Result<()> {
+    pub async fn run(&mut self) -> anyhow::Result<()> {
         let mut tick = interval(Duration::from_secs_f32(DT));
         let mut timeout_check = interval(Duration::from_secs(1));
 
@@ -75,7 +77,7 @@ impl Server {
         }
     }
 
-    async fn handle_event(&self, event: WorldEvent) -> std::io::Result<()> {
+    async fn handle_event(&self, event: WorldEvent) -> anyhow::Result<()> {
         match event {
             WorldEvent::PlayerMoved { id, pos, look } => {
                 self.broadcast(&Message::PositionUpdate {
@@ -91,7 +93,10 @@ impl Server {
                 data,
             } => {
                 self.send_to(
-                    &Message::ChunkLoaded { pos, data },
+                    &Message::ChunkLoaded {
+                        pos,
+                        data: VoxelBuffer::new(UVec3::ZERO).into(),
+                    },
                     self.clients[&for_player].addr,
                 )
                 .await?;
@@ -101,7 +106,7 @@ impl Server {
         Ok(())
     }
 
-    async fn handle_message(&mut self, msg: Message, addr: SocketAddr) -> std::io::Result<()> {
+    async fn handle_message(&mut self, msg: Message, addr: SocketAddr) -> anyhow::Result<()> {
         match msg {
             Message::Connect { name } => {
                 self.handle_connect(name, addr).await?;
@@ -131,7 +136,7 @@ impl Server {
         Ok(())
     }
 
-    async fn handle_connect(&mut self, name: String, addr: SocketAddr) -> std::io::Result<()> {
+    async fn handle_connect(&mut self, name: String, addr: SocketAddr) -> anyhow::Result<()> {
         let id = self.world.add_player();
         println!("{} ({}) connected", name, id);
 
@@ -168,7 +173,7 @@ impl Server {
         Ok(())
     }
 
-    async fn remove_client(&mut self, id: u32) -> std::io::Result<()> {
+    async fn remove_client(&mut self, id: u32) -> anyhow::Result<()> {
         let Some(client) = self.clients.remove(&id) else {
             return Ok(());
         };
@@ -183,7 +188,7 @@ impl Server {
         self.broadcast(&left_msg).await
     }
 
-    async fn check_timeouts(&mut self) -> std::io::Result<()> {
+    async fn check_timeouts(&mut self) -> anyhow::Result<()> {
         let now = Instant::now();
         let mut disconnected = Vec::new();
 
@@ -200,13 +205,13 @@ impl Server {
         Ok(())
     }
 
-    async fn send_to(&self, msg: &Message, addr: SocketAddr) -> std::io::Result<()> {
+    async fn send_to(&self, msg: &Message, addr: SocketAddr) -> anyhow::Result<()> {
         let bytes = msg.serialize()?;
         self.socket.send_to(&bytes, addr).await?;
         Ok(())
     }
 
-    async fn broadcast(&self, msg: &Message) -> std::io::Result<()> {
+    async fn broadcast(&self, msg: &Message) -> anyhow::Result<()> {
         let bytes = msg.serialize()?;
 
         for client in self.clients.values() {

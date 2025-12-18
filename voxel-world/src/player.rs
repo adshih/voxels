@@ -1,6 +1,7 @@
 use glam::{IVec3, Vec3};
+use serde::{Deserialize, Serialize};
 
-#[derive(Default, Debug, Clone)]
+#[derive(Serialize, Deserialize, Default, Debug, Clone)]
 pub struct PlayerInput {
     pub dir: Vec3,
     pub look: Vec3,
