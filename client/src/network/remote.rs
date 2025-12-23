@@ -36,10 +36,10 @@ pub fn connect(addr: SocketAddr, player_name: String) -> anyhow::Result<(Connect
         send.finish()?;
 
         let mut buf = vec![0u8; 1024];
-        if let Some(n) = recv.read(&mut buf).await? {
-            if let Ok(msg) = Message::deserialize(&buf[..n]) {
-                let _ = incoming_tx.send(msg);
-            }
+        if let Some(n) = recv.read(&mut buf).await?
+            && let Ok(msg) = Message::deserialize(&buf[..n])
+        {
+            let _ = incoming_tx.send(msg);
         }
 
         tokio::spawn(network_task(conn, outgoing_rx, incoming_tx));
@@ -83,10 +83,10 @@ async fn network_task(
                 let tx = incoming_tx.clone();
 
                 tokio::spawn(async move {
-                    if let Ok(data) = recv.read_to_end(MAX_CHUNK_SIZE).await {
-                        if let Ok(msg) = Message::deserialize(&data) {
-                            let _ = tx.send(msg);
-                        }
+                    if let Ok(data) = recv.read_to_end(MAX_CHUNK_SIZE).await
+                        && let Ok(msg) = Message::deserialize(&data)
+                    {
+                        let _ = tx.send(msg);
                     }
                 });
             }
@@ -99,11 +99,11 @@ async fn network_task(
                         }
                     }
                     _ => {
-                        if let Ok(mut send) = conn.open_uni().await {
-                            if let Ok(bytes) = msg.serialize() {
-                                let _ = send.write_all(&bytes).await;
-                                let _ = send.finish();
-                            }
+                        if let Ok(mut send) = conn.open_uni().await
+                            && let Ok(bytes) = msg.serialize()
+                        {
+                            let _ = send.write_all(&bytes).await;
+                            let _ = send.finish();
                         }
                     }
                 }

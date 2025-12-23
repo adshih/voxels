@@ -90,10 +90,10 @@ async fn handle_player(conn: Connection, state: Arc<RwLock<ServerState>>) {
         tokio::select! {
             result = conn.read_datagram() => {
                 let Ok(data) = result else { break };
-                if let Ok(msg) = Message::deserialize(&data) {
-                    if let Some(id) = client_id {
-                        handle_message(msg, id, &state).await;
-                    }
+                if let Ok(msg) = Message::deserialize(&data)
+                    && let Some(id) = client_id
+                {
+                    handle_message(msg, id, &state).await;
                 }
             }
 
@@ -101,23 +101,23 @@ async fn handle_player(conn: Connection, state: Arc<RwLock<ServerState>>) {
                 let Ok((mut send, mut recv)) = result else { break };
                 let mut buf = vec![0u8; 1024];
 
-                if let Ok(Some(n)) = recv.read(&mut buf).await {
-                    if let Ok(msg) = Message::deserialize(&buf[..n]) {
-                        match &msg {
-                            Message::Connect { name } => {
-                               let id = register_player(&state).await;
-                               client_id = Some(id);
+                if let Ok(Some(n)) = recv.read(&mut buf).await
+                    && let Ok(msg) = Message::deserialize(&buf[..n])
+                {
+                    match &msg {
+                        Message::Connect { name } => {
+                           let id = register_player(&state).await;
+                           client_id = Some(id);
 
-                               send_connect_ack(id, &mut send).await;
-                               send_existing_players(&conn, &state).await;
+                           send_connect_ack(id, &mut send).await;
+                           send_existing_players(&conn, &state).await;
 
-                               insert_client(id, conn.clone(), name, &state).await;
-                               broadcast_player_joined(id, &name, &state).await;
-                            }
-                            _ => {
-                                if let Some(id) = client_id {
-                                    handle_message(msg, id, &state).await;
-                                }
+                           insert_client(id, conn.clone(), name, &state).await;
+                           broadcast_player_joined(id, name, &state).await;
+                        }
+                        _ => {
+                            if let Some(id) = client_id {
+                                handle_message(msg, id, &state).await;
                             }
                         }
                     }
@@ -151,7 +151,7 @@ async fn send_existing_players(conn: &Connection, state: &Arc<RwLock<ServerState
 
     for (&id, client) in &state.clients {
         send_reliable(
-            &conn,
+            conn,
             &Message::PlayerJoined {
                 client_id: id,
                 name: client.name.clone(),
@@ -190,6 +190,7 @@ async fn insert_client(id: u32, conn: Connection, name: &str, state: &Arc<RwLock
 }
 
 async fn handle_message(msg: Message, id: u32, state: &Arc<RwLock<ServerState>>) {
+    #[allow(clippy::single_match)]
     match msg {
         Message::Input { input } => {
             let mut state = state.write().await;
@@ -253,11 +254,11 @@ async fn handle_event(state: &Arc<RwLock<ServerState>>, event: WorldEvent) {
 }
 
 async fn send_reliable(conn: &Connection, msg: &Message) {
-    if let Ok(mut send) = conn.open_uni().await {
-        if let Ok(bytes) = msg.serialize() {
-            let _ = send.write_all(&bytes).await;
-            let _ = send.finish();
-        }
+    if let Ok(mut send) = conn.open_uni().await
+        && let Ok(bytes) = msg.serialize()
+    {
+        let _ = send.write_all(&bytes).await;
+        let _ = send.finish();
     }
 }
 

@@ -52,7 +52,7 @@ impl TerrainGenerator {
                         Voxel::EMPTY
                     };
 
-                    let pos = UVec3::new(x as u32, y as u32, z as u32);
+                    let pos = UVec3::new(x, y, z);
 
                     buffer.set(pos, voxel);
                 }
