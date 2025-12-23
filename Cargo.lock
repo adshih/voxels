@@ -1790,6 +1790,7 @@ dependencies = [
  "anyhow",
  "bevy",
  "noise",
+ "quinn",
  "server",
  "tokio",
  "voxel-core",

@@ -7,6 +7,7 @@ edition = "2024"
 anyhow = "1.0.100"
 bevy = "0.17"
 noise = "0.9.0"
+quinn = "0.11.9"
 server = { version = "0.1.0", path = "../server" }
 tokio = { version = "1.48.0", features = ["full"] }
 voxel-core = { version = "0.1.0", path = "../voxel-core" }

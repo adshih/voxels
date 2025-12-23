@@ -1,6 +1,8 @@
+use std::net::SocketAddr;
+
 use bevy::prelude::*;
 
-use server::{Message, Server};
+use server::{Message, Server, configure_server};
 
 use crate::Settings;
 use crate::network::{Connection, LocalClientId, PlayerEntities, TokioRuntime, remote};
@@ -9,23 +11,7 @@ use crate::player::{LocalPlayer, RemotePlayer};
 pub fn setup_connection(mut commands: Commands, settings: Res<Settings>) {
     let addr = match &settings.server_addr {
         Some(addr) => addr.parse().expect("Invalid server address"),
-        None => {
-            // Spawn embedded server
-            let rt = tokio::runtime::Runtime::new().unwrap();
-            let server = rt
-                .block_on(Server::bind("127.0.0.1:0"))
-                .expect("Failed to bind server");
-            let addr = server.local_addr();
-
-            std::thread::spawn(move || {
-                rt.block_on(async {
-                    let mut server = server;
-                    server.run().await.unwrap();
-                });
-            });
-
-            addr
-        }
+        None => spawn_embedded_server().expect("Failed to start embedded server"),
     };
 
     let (connection, runtime) =
@@ -33,6 +19,19 @@ pub fn setup_connection(mut commands: Commands, settings: Res<Settings>) {
 
     commands.insert_resource(connection);
     commands.insert_resource(TokioRuntime(runtime));
+}
+
+fn spawn_embedded_server() -> anyhow::Result<SocketAddr> {
+    let rt = tokio::runtime::Runtime::new()?;
+    let config = configure_server()?;
+    let mut server = rt.block_on(Server::bind("127.0.0.1:0".parse().unwrap(), config))?;
+    let addr = server.local_addr();
+
+    std::thread::spawn(move || {
+        rt.block_on(server.run()).unwrap();
+    });
+
+    Ok(addr)
 }
 
 pub fn receive_updates(

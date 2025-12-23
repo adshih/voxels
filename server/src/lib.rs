@@ -1,10 +1,13 @@
 mod message;
 
 use glam::UVec3;
+use quinn::rustls::pki_types::PrivatePkcs8KeyDer;
+use quinn::{Connection, Endpoint, ServerConfig};
 use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::time::{Duration, Instant};
-use tokio::net::UdpSocket;
+use std::sync::Arc;
+use std::time::Duration;
+use tokio::sync::RwLock;
 use tokio::time::interval;
 use voxel_core::VoxelBuffer;
 use voxel_world::VoxelWorld;
@@ -15,209 +18,233 @@ use voxel_world::events::WorldEvent;
 
 const TICK_RATE: f32 = 60.0;
 const DT: f32 = 1.0 / TICK_RATE;
-const TIMEOUT: Duration = Duration::from_secs(5);
 
 struct ClientInfo {
-    addr: SocketAddr,
+    conn: Connection,
     name: String,
-    last_seen: Instant,
+}
+
+struct ServerState {
+    world: VoxelWorld,
+    clients: HashMap<u32, ClientInfo>,
 }
 
 pub struct Server {
-    socket: UdpSocket,
-    buf: Vec<u8>,
-    world: VoxelWorld,
-    clients: HashMap<u32, ClientInfo>,
-    addr_to_id: HashMap<SocketAddr, u32>,
+    endpoint: Endpoint,
+    state: Arc<RwLock<ServerState>>,
 }
 
 impl Server {
-    pub async fn bind(addr: &str) -> std::io::Result<Self> {
-        let socket = UdpSocket::bind(addr).await?;
-        println!("Listening on {}", socket.local_addr()?);
+    pub async fn bind(addr: SocketAddr, config: ServerConfig) -> anyhow::Result<Self> {
+        let endpoint = Endpoint::server(config, addr)?;
+        println!("Listening on {}", addr);
 
         Ok(Self {
-            socket,
-            buf: vec![0u8; 1024],
-            world: VoxelWorld::new(123),
-            clients: HashMap::new(),
-            addr_to_id: HashMap::new(),
+            endpoint,
+            state: Arc::new(RwLock::new(ServerState {
+                world: VoxelWorld::new(123),
+                clients: HashMap::new(),
+            })),
         })
     }
 
     pub fn local_addr(&self) -> SocketAddr {
-        self.socket.local_addr().unwrap()
+        self.endpoint.local_addr().unwrap()
     }
 
     pub async fn run(&mut self) -> anyhow::Result<()> {
-        let mut tick = interval(Duration::from_secs_f32(DT));
-        let mut timeout_check = interval(Duration::from_secs(1));
+        let state = self.state.clone();
 
-        loop {
-            tokio::select! {
-                result = self.socket.recv_from(&mut self.buf) => {
-                    let (len, addr) = result?;
-                    if let Ok(msg) = Message::deserialize(&self.buf[..len]) {
-                        self.handle_message(msg, addr).await?;
+        tokio::spawn(async move {
+            let mut interval = interval(Duration::from_secs_f32(DT));
+
+            loop {
+                interval.tick().await;
+
+                let events = {
+                    let mut state = state.write().await;
+                    state.world.tick(DT);
+
+                    state.world.drain_events()
+                };
+
+                for event in events {
+                    handle_event(&state, event).await;
+                }
+            }
+        });
+
+        while let Some(conn) = self.endpoint.accept().await {
+            let state = self.state.clone();
+            tokio::spawn(async move {
+                if let Ok(connection) = conn.await {
+                    handle_player(connection, state).await;
+                }
+            });
+        }
+
+        Ok(())
+    }
+}
+
+async fn handle_player(conn: Connection, state: Arc<RwLock<ServerState>>) {
+    let mut client_id: Option<u32> = None;
+
+    loop {
+        tokio::select! {
+            result = conn.read_datagram() => {
+                let Ok(data) = result else { break };
+                if let Ok(msg) = Message::deserialize(&data) {
+                    if let Some(id) = client_id {
+                        handle_message(msg, id, &state).await;
                     }
                 }
+            }
 
-                _ = tick.tick() => {
-                    self.world.tick(DT);
+            result = conn.accept_bi() => {
+                let Ok((mut send, mut recv)) = result else { break };
+                let mut buf = vec![0u8; 1024];
 
-                    for event in self.world.drain_events() {
-                        self.handle_event(event).await?;
+                if let Ok(Some(n)) = recv.read(&mut buf).await {
+                    if let Ok(msg) = Message::deserialize(&buf[..n]) {
+                        match &msg {
+                            Message::Connect { name } => {
+                                let id = handle_connect(name.clone(), conn.clone(), &state).await;
+                                client_id = Some(id);
+
+                                let msg = Message::ConnectAck { client_id: id };
+                                if let Ok(bytes) = msg.serialize() {
+                                    let _ = send.write_all(&bytes).await;
+                                    let _ = send.finish();
+                                }
+
+                                let state = state.write().await;
+                                for (&other_id, client) in &state.clients {
+                                    send_reliable(
+                                        &conn,
+                                        &Message::PlayerJoined {
+                                            client_id: other_id,
+                                            name: client.name.clone(),
+                                        },
+                                    )
+                                    .await;
+                                }
+
+                                let join_msg = Message::PlayerJoined {
+                                    client_id: id,
+                                    name: name.clone(),
+                                };
+                                for client in state.clients.values() {
+                                    send_reliable(&client.conn, &join_msg).await;
+                                }
+                            }
+                            _ => {
+                                if let Some(id) = client_id {
+                                    handle_message(msg, id, &state).await;
+                                }
+                            }
+                        }
                     }
-                }
-
-                _ = timeout_check.tick() => {
-                    self.check_timeouts().await?;
                 }
             }
         }
     }
 
-    async fn handle_event(&self, event: WorldEvent) -> anyhow::Result<()> {
-        match event {
-            WorldEvent::PlayerMoved { id, pos, look } => {
-                self.broadcast(&Message::PositionUpdate {
-                    client_id: id,
-                    pos,
-                    look,
-                })
-                .await?;
-            }
-            WorldEvent::ChunkLoaded {
-                for_player,
+    if let Some(id) = client_id {
+        remove_client(id, &state).await;
+    }
+}
+
+async fn handle_message(msg: Message, id: u32, state: &Arc<RwLock<ServerState>>) {
+    match msg {
+        Message::Input { input } => {
+            let mut state = state.write().await;
+            state.world.execute(WorldCommand::PlayerMove { id, input });
+        }
+        _ => {}
+    }
+}
+
+async fn handle_connect(name: String, conn: Connection, state: &Arc<RwLock<ServerState>>) -> u32 {
+    let mut state = state.write().await;
+    let id = state.world.add_player();
+    println!("{} (id: {}) connected", name, id);
+
+    state.clients.insert(id, ClientInfo { conn, name });
+
+    id
+}
+
+async fn remove_client(id: u32, state: &Arc<RwLock<ServerState>>) {
+    let mut state = state.write().await;
+    let Some(client) = state.clients.remove(&id) else {
+        return;
+    };
+
+    println!("{} (id: {}) disconnected", client.name, id);
+
+    let msg = Message::PlayerLeft {
+        client_id: id,
+        name: client.name,
+    };
+    for client in state.clients.values() {
+        send_reliable(&client.conn, &msg).await;
+    }
+}
+
+async fn handle_event(state: &Arc<RwLock<ServerState>>, event: WorldEvent) {
+    match event {
+        WorldEvent::PlayerMoved { id, pos, look } => {
+            let state = state.read().await;
+            let msg = Message::PositionUpdate {
+                client_id: id,
                 pos,
-                data,
-            } => {
-                self.send_to(
-                    &Message::ChunkLoaded {
+                look,
+            };
+
+            let bytes = msg.serialize().unwrap();
+
+            for client in state.clients.values() {
+                let _ = client.conn.send_datagram(bytes.clone().into());
+            }
+        }
+        WorldEvent::ChunkLoaded {
+            for_player,
+            pos,
+            data,
+        } => {
+            let conn = {
+                let state = state.read().await;
+                state.clients.get(&for_player).map(|c| c.conn.clone())
+            };
+
+            if let Some(conn) = conn {
+                tokio::spawn(async move {
+                    let msg = Message::ChunkLoaded {
                         pos,
                         data: VoxelBuffer::new(UVec3::ZERO).into(),
-                    },
-                    self.clients[&for_player].addr,
-                )
-                .await?;
+                    };
+                    send_reliable(&conn, &msg).await;
+                });
             }
         }
-
-        Ok(())
     }
+}
 
-    async fn handle_message(&mut self, msg: Message, addr: SocketAddr) -> anyhow::Result<()> {
-        match msg {
-            Message::Connect { name } => {
-                self.handle_connect(name, addr).await?;
-            }
-            Message::Disconnect => {
-                if let Some(id) = self.addr_to_id.get(&addr) {
-                    self.remove_client(*id).await?;
-                }
-            }
-            Message::Input { input } => {
-                if let Some(&id) = self.addr_to_id.get(&addr) {
-                    if let Some(client) = self.clients.get_mut(&id) {
-                        client.last_seen = Instant::now();
-                    }
-                    self.world.execute(WorldCommand::PlayerMove { id, input });
-                }
-            }
-            _ => {
-                if let Some(id) = self.addr_to_id.get(&addr)
-                    && let Some(client) = self.clients.get_mut(id)
-                {
-                    client.last_seen = Instant::now();
-                }
-            }
+async fn send_reliable(conn: &Connection, msg: &Message) {
+    if let Ok(mut send) = conn.open_uni().await {
+        if let Ok(bytes) = msg.serialize() {
+            let _ = send.write_all(&bytes).await;
+            let _ = send.finish();
         }
-
-        Ok(())
     }
+}
 
-    async fn handle_connect(&mut self, name: String, addr: SocketAddr) -> anyhow::Result<()> {
-        let id = self.world.add_player();
-        println!("{} ({}) connected", name, id);
-
-        self.send_to(&Message::ConnectAck { client_id: id }, addr)
-            .await?;
-
-        for (&id, client_info) in &self.clients {
-            self.send_to(
-                &Message::PlayerJoined {
-                    client_id: id,
-                    name: client_info.name.clone(),
-                },
-                addr,
-            )
-            .await?;
-        }
-
-        self.broadcast(&Message::PlayerJoined {
-            client_id: id,
-            name: name.clone(),
-        })
-        .await?;
-
-        self.clients.insert(
-            id,
-            ClientInfo {
-                addr,
-                name,
-                last_seen: Instant::now(),
-            },
-        );
-        self.addr_to_id.insert(addr, id);
-
-        Ok(())
-    }
-
-    async fn remove_client(&mut self, id: u32) -> anyhow::Result<()> {
-        let Some(client) = self.clients.remove(&id) else {
-            return Ok(());
-        };
-
-        self.addr_to_id.remove(&client.addr);
-        println!("{} ({}) disconnected", client.name, id);
-
-        let left_msg = Message::PlayerLeft {
-            client_id: id,
-            name: client.name,
-        };
-        self.broadcast(&left_msg).await
-    }
-
-    async fn check_timeouts(&mut self) -> anyhow::Result<()> {
-        let now = Instant::now();
-        let mut disconnected = Vec::new();
-
-        for (id, client) in &self.clients {
-            if now.duration_since(client.last_seen) > TIMEOUT {
-                disconnected.push(*id);
-            }
-        }
-
-        for id in disconnected {
-            self.remove_client(id).await?;
-        }
-
-        Ok(())
-    }
-
-    async fn send_to(&self, msg: &Message, addr: SocketAddr) -> anyhow::Result<()> {
-        let bytes = msg.serialize()?;
-        self.socket.send_to(&bytes, addr).await?;
-        Ok(())
-    }
-
-    async fn broadcast(&self, msg: &Message) -> anyhow::Result<()> {
-        let bytes = msg.serialize()?;
-
-        for client in self.clients.values() {
-            self.socket.send_to(&bytes, client.addr).await?;
-        }
-
-        Ok(())
-    }
+pub fn configure_server() -> anyhow::Result<ServerConfig> {
+    let cert = rcgen::generate_simple_self_signed(vec!["localhost".to_string()])?;
+    let key = PrivatePkcs8KeyDer::from(cert.signing_key.serialize_der());
+    Ok(ServerConfig::with_single_cert(
+        vec![cert.cert.into()],
+        key.into(),
+    )?)
 }

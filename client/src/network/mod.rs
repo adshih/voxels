@@ -5,6 +5,7 @@ use tokio::sync::mpsc;
 
 use server::Message;
 
+mod cert;
 pub mod remote;
 mod systems;
 
