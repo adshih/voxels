@@ -4,11 +4,9 @@ use tokio::runtime::Runtime;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::time::Duration;
 
 use server::Message;
 
-use tokio::net::UdpSocket;
 use tokio::sync::mpsc;
 
 use crate::network::cert::SkipServerVerification;
@@ -23,7 +21,7 @@ pub fn connect(addr: SocketAddr, player_name: String) -> anyhow::Result<(Connect
 
     let connection = rt.block_on(async {
         let config = configure_client()?;
-        let mut endpoint = Endpoint::client("0.0.0.0:0".parse().unwrap())?;
+        let endpoint = Endpoint::client("0.0.0.0:0".parse().unwrap())?;
 
         let conn = endpoint.connect_with(config, addr, SERVER_NAME)?.await?;
 

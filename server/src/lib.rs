@@ -1,6 +1,5 @@
 mod message;
 
-use glam::UVec3;
 use quinn::rustls::pki_types::PrivatePkcs8KeyDer;
 use quinn::{Connection, Endpoint, ServerConfig};
 use std::collections::HashMap;
@@ -9,7 +8,6 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
 use tokio::time::interval;
-use voxel_core::VoxelBuffer;
 use voxel_world::VoxelWorld;
 
 pub use message::Message;
@@ -63,9 +61,7 @@ impl Server {
 
                 let events = {
                     let mut state = state.write().await;
-                    state.world.tick(DT);
-
-                    state.world.drain_events()
+                    state.world.tick(DT)
                 };
 
                 for event in events {
@@ -109,34 +105,14 @@ async fn handle_player(conn: Connection, state: Arc<RwLock<ServerState>>) {
                     if let Ok(msg) = Message::deserialize(&buf[..n]) {
                         match &msg {
                             Message::Connect { name } => {
-                                let id = handle_connect(name.clone(), conn.clone(), &state).await;
-                                client_id = Some(id);
+                               let id = register_player(&state).await;
+                               client_id = Some(id);
 
-                                let msg = Message::ConnectAck { client_id: id };
-                                if let Ok(bytes) = msg.serialize() {
-                                    let _ = send.write_all(&bytes).await;
-                                    let _ = send.finish();
-                                }
+                               send_connect_ack(id, &mut send).await;
+                               send_existing_players(&conn, &state).await;
 
-                                let state = state.write().await;
-                                for (&other_id, client) in &state.clients {
-                                    send_reliable(
-                                        &conn,
-                                        &Message::PlayerJoined {
-                                            client_id: other_id,
-                                            name: client.name.clone(),
-                                        },
-                                    )
-                                    .await;
-                                }
-
-                                let join_msg = Message::PlayerJoined {
-                                    client_id: id,
-                                    name: name.clone(),
-                                };
-                                for client in state.clients.values() {
-                                    send_reliable(&client.conn, &join_msg).await;
-                                }
+                               insert_client(id, conn.clone(), name, &state).await;
+                               broadcast_player_joined(id, &name, &state).await;
                             }
                             _ => {
                                 if let Some(id) = client_id {
@@ -155,6 +131,64 @@ async fn handle_player(conn: Connection, state: Arc<RwLock<ServerState>>) {
     }
 }
 
+async fn register_player(state: &Arc<RwLock<ServerState>>) -> u32 {
+    let mut state = state.write().await;
+    let id = state.world.add_player();
+    println!("Player (id: {}) connected", id);
+    id
+}
+
+async fn send_connect_ack(id: u32, send: &mut quinn::SendStream) {
+    let msg = Message::ConnectAck { client_id: id };
+    if let Ok(bytes) = msg.serialize() {
+        let _ = send.write_all(&bytes).await;
+        let _ = send.finish();
+    }
+}
+
+async fn send_existing_players(conn: &Connection, state: &Arc<RwLock<ServerState>>) {
+    let state = state.read().await;
+
+    for (&id, client) in &state.clients {
+        send_reliable(
+            &conn,
+            &Message::PlayerJoined {
+                client_id: id,
+                name: client.name.clone(),
+            },
+        )
+        .await;
+    }
+}
+
+async fn broadcast_player_joined(id: u32, name: &str, state: &Arc<RwLock<ServerState>>) {
+    let state = state.read().await;
+
+    for (&other_id, client) in &state.clients {
+        if other_id != id {
+            send_reliable(
+                &client.conn,
+                &Message::PlayerJoined {
+                    client_id: id,
+                    name: name.to_string(),
+                },
+            )
+            .await;
+        }
+    }
+}
+
+async fn insert_client(id: u32, conn: Connection, name: &str, state: &Arc<RwLock<ServerState>>) {
+    let mut state = state.write().await;
+    state.clients.insert(
+        id,
+        ClientInfo {
+            conn,
+            name: name.to_string(),
+        },
+    );
+}
+
 async fn handle_message(msg: Message, id: u32, state: &Arc<RwLock<ServerState>>) {
     match msg {
         Message::Input { input } => {
@@ -163,16 +197,6 @@ async fn handle_message(msg: Message, id: u32, state: &Arc<RwLock<ServerState>>)
         }
         _ => {}
     }
-}
-
-async fn handle_connect(name: String, conn: Connection, state: &Arc<RwLock<ServerState>>) -> u32 {
-    let mut state = state.write().await;
-    let id = state.world.add_player();
-    println!("{} (id: {}) connected", name, id);
-
-    state.clients.insert(id, ClientInfo { conn, name });
-
-    id
 }
 
 async fn remove_client(id: u32, state: &Arc<RwLock<ServerState>>) {
@@ -220,10 +244,7 @@ async fn handle_event(state: &Arc<RwLock<ServerState>>, event: WorldEvent) {
 
             if let Some(conn) = conn {
                 tokio::spawn(async move {
-                    let msg = Message::ChunkLoaded {
-                        pos,
-                        data: VoxelBuffer::new(UVec3::ZERO).into(),
-                    };
+                    let msg = Message::ChunkLoaded { pos, data };
                     send_reliable(&conn, &msg).await;
                 });
             }

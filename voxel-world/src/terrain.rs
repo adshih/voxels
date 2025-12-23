@@ -1,7 +1,11 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 
 use glam::{IVec3, UVec3, Vec3};
 use noise::{core::perlin::perlin_2d, permutationtable::PermutationTable};
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use voxel_core::{Voxel, VoxelBuffer};
 
 pub const CHUNK_SIZE: UVec3 = UVec3::splat(32);
@@ -59,41 +63,56 @@ impl TerrainGenerator {
     }
 }
 
-pub struct VoxelTerrain {
-    generator: TerrainGenerator,
+pub struct Terrain {
     chunks: HashMap<IVec3, Arc<VoxelBuffer>>,
+    pending: HashSet<IVec3>,
+    request_tx: UnboundedSender<IVec3>,
+    result_rx: UnboundedReceiver<(IVec3, Arc<VoxelBuffer>)>,
 }
 
-impl VoxelTerrain {
+impl Terrain {
     pub fn new(seed: u32) -> Self {
-        Self {
-            generator: TerrainGenerator::new(seed),
-            chunks: HashMap::new(),
-        }
-    }
+        let (request_tx, mut request_rx) = unbounded_channel();
+        let (result_tx, result_rx) = unbounded_channel();
 
-    pub fn load_chunk(&mut self, pos: IVec3) -> Arc<VoxelBuffer> {
-        self.chunks
-            .entry(pos)
-            .or_insert_with(|| Arc::new(self.generator.generate(pos)))
-            .clone()
-    }
+        std::thread::spawn(move || {
+            let generator = TerrainGenerator::new(seed);
 
-    pub fn load_chunks_around(&mut self, center: IVec3) -> Vec<(IVec3, Arc<VoxelBuffer>)> {
-        let radius = CHUNK_RENDER_DISTANCE;
-        let mut loaded = Vec::new();
-
-        for x in -radius..=radius {
-            for y in -radius..=radius {
-                for z in -radius..=radius {
-                    let pos = IVec3::new(center.x + x, center.y + y, center.z + z);
-                    let data = self.load_chunk(pos);
-                    loaded.push((pos, data));
-                }
+            while let Some(pos) = request_rx.blocking_recv() {
+                let data = Arc::new(generator.generate(pos));
+                let _ = result_tx.send((pos, data));
             }
+        });
+
+        Terrain {
+            chunks: HashMap::new(),
+            pending: HashSet::new(),
+            request_tx,
+            result_rx,
+        }
+    }
+
+    pub fn _get(&self, pos: IVec3) -> Option<Arc<VoxelBuffer>> {
+        self.chunks.get(&pos).cloned()
+    }
+
+    pub fn request(&mut self, pos: IVec3) {
+        if !self.chunks.contains_key(&pos) && !self.pending.contains(&pos) {
+            self.pending.insert(pos);
+            let _ = self.request_tx.send(pos);
+        }
+    }
+
+    pub fn poll(&mut self) -> Vec<(IVec3, Arc<VoxelBuffer>)> {
+        let mut ready = Vec::new();
+
+        while let Ok((pos, data)) = self.result_rx.try_recv() {
+            self.chunks.insert(pos, data.clone());
+            self.pending.remove(&pos);
+            ready.push((pos, data));
         }
 
-        loaded
+        ready
     }
 }
 
@@ -103,4 +122,17 @@ pub fn world_to_chunk_pos(pos: Vec3) -> IVec3 {
         (pos.y / CHUNK_SIZE.y as f32).floor() as i32,
         (pos.z / CHUNK_SIZE.z as f32).floor() as i32,
     )
+}
+
+pub fn chunks_in_radius(center: IVec3, radius: i32) -> Vec<IVec3> {
+    let mut positions = Vec::new();
+
+    for x in -radius..=radius {
+        for y in -radius..=radius {
+            for z in -radius..=radius {
+                positions.push(center + IVec3::new(x, y, z));
+            }
+        }
+    }
+    positions
 }

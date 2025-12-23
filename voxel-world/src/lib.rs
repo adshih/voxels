@@ -1,11 +1,11 @@
-use glam::Vec3;
+use glam::{IVec3, Vec3};
 use std::collections::HashMap;
 
 use crate::{
     commands::WorldCommand,
     events::WorldEvent,
     player::{PlayerInput, PlayerState},
-    terrain::{VoxelTerrain, world_to_chunk_pos},
+    terrain::{CHUNK_RENDER_DISTANCE, Terrain, chunks_in_radius, world_to_chunk_pos},
 };
 
 pub mod commands;
@@ -15,10 +15,9 @@ mod terrain;
 
 pub struct VoxelWorld {
     players: HashMap<u32, PlayerState>,
-    next_id: u32,
-    tick: u64,
+    terrain: Terrain,
     events: Vec<WorldEvent>,
-    terrain: VoxelTerrain,
+    next_id: u32,
 }
 
 impl VoxelWorld {
@@ -28,15 +27,10 @@ impl VoxelWorld {
     pub fn new(seed: u32) -> Self {
         Self {
             players: HashMap::new(),
-            tick: 0,
-            next_id: 1,
+            terrain: Terrain::new(seed),
             events: Vec::new(),
-            terrain: VoxelTerrain::new(seed),
+            next_id: 1,
         }
-    }
-
-    pub fn players(&self) -> &HashMap<u32, PlayerState> {
-        &self.players
     }
 
     pub fn add_player(&mut self) -> u32 {
@@ -48,10 +42,16 @@ impl VoxelWorld {
         id
     }
 
-    pub fn tick(&mut self, dt: f32) {
+    pub fn remove_player(&mut self, id: u32) {
+        self.players.remove(&id);
+    }
+
+    pub fn tick(&mut self, dt: f32) -> Vec<WorldEvent> {
         self.process_player_inputs(dt);
         self.sync_player_chunks();
-        self.tick += 1;
+        self.poll_terrain();
+
+        std::mem::take(&mut self.events)
     }
 
     pub fn execute(&mut self, cmd: WorldCommand) {
@@ -64,29 +64,29 @@ impl VoxelWorld {
         }
     }
 
-    pub fn drain_events(&mut self) -> Vec<WorldEvent> {
-        std::mem::take(&mut self.events)
+    fn sync_player_chunks(&mut self) {
+        for player in &mut self.players.values_mut() {
+            let chunk_pos = world_to_chunk_pos(player.pos);
+
+            if player.chunk_anchor != Some(chunk_pos) {
+                player.chunk_anchor = Some(chunk_pos);
+
+                for pos in chunks_in_radius(chunk_pos, CHUNK_RENDER_DISTANCE) {
+                    self.terrain.request(pos);
+                }
+            }
+        }
     }
 
-    fn sync_player_chunks(&mut self) {
-        for (
-            id,
-            PlayerState {
-                pos, chunk_anchor, ..
-            },
-        ) in self.players.iter_mut()
-        {
-            let chunk_pos = world_to_chunk_pos(*pos);
-
-            if *chunk_anchor != Some(chunk_pos) {
-                *chunk_anchor = Some(chunk_pos);
-
-                for (pos, data) in self.terrain.load_chunks_around(chunk_pos) {
+    fn poll_terrain(&mut self) {
+        for (pos, data) in self.terrain.poll() {
+            for (&player_id, player) in &self.players {
+                if player_needs_chunk(player, pos) {
                     self.events.push(WorldEvent::ChunkLoaded {
-                        for_player: *id,
+                        for_player: player_id,
                         pos,
-                        data,
-                    })
+                        data: data.clone(),
+                    });
                 }
             }
         }
@@ -121,5 +121,17 @@ impl VoxelWorld {
         }
 
         self.events.extend(events);
+    }
+}
+
+fn player_needs_chunk(player: &PlayerState, chunk_pos: IVec3) -> bool {
+    match player.chunk_anchor {
+        Some(anchor) => {
+            let diff = chunk_pos - anchor;
+            diff.x.abs() <= CHUNK_RENDER_DISTANCE
+                && diff.y.abs() <= CHUNK_RENDER_DISTANCE
+                && diff.z.abs() <= CHUNK_RENDER_DISTANCE
+        }
+        None => false,
     }
 }
