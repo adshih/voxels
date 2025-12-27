@@ -1791,9 +1791,9 @@ dependencies = [
  "bevy",
  "noise",
  "quinn",
- "server",
  "tokio",
  "voxel-core",
+ "voxel-net",
  "voxel-world",
 ]
 
@@ -4509,21 +4509,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "server"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "glam",
- "postcard",
- "quinn",
- "rcgen",
- "serde",
- "tokio",
- "voxel-core",
- "voxel-world",
-]
-
-[[package]]
 name = "sharded-slab"
 version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5186,6 +5171,21 @@ version = "0.1.0"
 dependencies = [
  "glam",
  "serde",
+]
+
+[[package]]
+name = "voxel-net"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "glam",
+ "postcard",
+ "quinn",
+ "rcgen",
+ "serde",
+ "tokio",
+ "voxel-core",
+ "voxel-world",
 ]
 
 [[package]]

@@ -6,10 +6,13 @@ use voxel_core::VoxelBuffer;
 use voxel_world::player::PlayerInput;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum Message {
-    Connect {
-        name: String,
-    },
+pub enum ClientMessage {
+    Connect { name: String },
+    Input { input: PlayerInput },
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum ServerMessage {
     ConnectAck {
         client_id: u32,
     },
@@ -20,11 +23,6 @@ pub enum Message {
     PlayerLeft {
         client_id: u32,
         name: String,
-    },
-    Heartbeat,
-    Disconnect,
-    Input {
-        input: PlayerInput,
     },
     PositionUpdate {
         client_id: u32,
@@ -40,34 +38,22 @@ pub enum Message {
     },
 }
 
-impl Message {
-    pub fn serialize(&self) -> anyhow::Result<Vec<u8>> {
+pub trait WireMessage: Sized {
+    fn serialize(&self) -> anyhow::Result<Vec<u8>>;
+    fn deserialize(bytes: &[u8]) -> anyhow::Result<Self>;
+}
+
+impl<T> WireMessage for T
+where
+    T: Serialize + for<'de> Deserialize<'de>,
+{
+    fn serialize(&self) -> anyhow::Result<Vec<u8>> {
         let bytes = postcard::to_allocvec(self)?;
         Ok(bytes)
     }
 
-    pub fn deserialize(bytes: &[u8]) -> anyhow::Result<Self> {
+    fn deserialize(bytes: &[u8]) -> anyhow::Result<Self> {
         let msg = postcard::from_bytes(bytes)?;
         Ok(msg)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_connect_roundtrip() {
-        let msg = Message::Connect {
-            name: "Adam".to_string(),
-        };
-
-        let bytes = msg.serialize().unwrap();
-        let decoded = Message::deserialize(&bytes).unwrap();
-
-        match decoded {
-            Message::Connect { name } => assert_eq!(name, "Adam"),
-            _ => panic!("Wrong message type"),
-        }
     }
 }

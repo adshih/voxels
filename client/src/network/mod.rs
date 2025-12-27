@@ -6,12 +6,12 @@ use crate::Systems;
 use crate::network::systems::{receive_updates, setup_connection};
 use crate::world::chunk::ChunkEntities;
 use bevy::prelude::*;
-use server::Message;
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use tokio::runtime::Runtime;
 use tokio::sync::mpsc;
 use voxel_core::VoxelBuffer;
+use voxel_net::message::{ClientMessage, ServerMessage};
 
 #[derive(Resource)]
 pub struct LocalClientId(pub u32);
@@ -24,16 +24,16 @@ pub struct TokioRuntime(#[allow(dead_code)] pub Runtime);
 
 #[derive(Resource)]
 pub struct Connection {
-    outgoing: mpsc::UnboundedSender<Message>,
-    incoming: mpsc::UnboundedReceiver<Message>,
+    outgoing: mpsc::UnboundedSender<ClientMessage>,
+    incoming: mpsc::UnboundedReceiver<ServerMessage>,
 }
 
 impl Connection {
-    pub fn send(&self, msg: Message) {
+    pub fn send(&self, msg: ClientMessage) {
         let _ = self.outgoing.send(msg);
     }
 
-    pub fn try_recv(&mut self) -> Option<Message> {
+    pub fn try_recv(&mut self) -> Option<ServerMessage> {
         self.incoming.try_recv().ok()
     }
 }

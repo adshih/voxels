@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use server::Message;
+use voxel_net::message::ClientMessage;
 use voxel_world::player::PlayerInput;
 
 use crate::{Systems, network::Connection};
@@ -70,7 +70,7 @@ fn read_input(keyboard: Res<ButtonInput<KeyCode>>, mut local_player: Single<&mut
 }
 
 pub fn send_player_input(connection: Res<Connection>, local_player: Single<&LocalPlayer>) {
-    connection.send(Message::Input {
+    connection.send(ClientMessage::Input {
         input: local_player.input.clone(),
     });
 }

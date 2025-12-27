@@ -1,4 +1,4 @@
-use server::{Server, configure_server};
+use voxel_net::{Server, configure_server};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

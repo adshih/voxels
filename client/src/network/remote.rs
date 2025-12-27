@@ -2,11 +2,11 @@ use super::Connection;
 use crate::network::cert::SkipServerVerification;
 use quinn::crypto::rustls::QuicClientConfig;
 use quinn::{ClientConfig, Connection as QuicConnection, Endpoint, rustls};
-use server::Message;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::runtime::Runtime;
 use tokio::sync::mpsc;
+use voxel_net::message::{ClientMessage, ServerMessage, WireMessage};
 
 const SERVER_NAME: &str = "localhost";
 const MAX_CHUNK_SIZE: usize = 70_000; // 64kb + some overhead
@@ -27,7 +27,7 @@ pub fn connect(addr: SocketAddr, player_name: String) -> anyhow::Result<(Connect
         let (incoming_tx, incoming_rx) = mpsc::unbounded_channel();
 
         let (mut send, mut recv) = conn.open_bi().await?;
-        let connect_msg = Message::Connect { name: player_name };
+        let connect_msg = ClientMessage::Connect { name: player_name };
 
         let bytes = connect_msg.serialize()?;
         send.write_all(&bytes).await?;
@@ -35,7 +35,7 @@ pub fn connect(addr: SocketAddr, player_name: String) -> anyhow::Result<(Connect
 
         let mut buf = vec![0u8; 1024];
         if let Some(n) = recv.read(&mut buf).await?
-            && let Ok(msg) = Message::deserialize(&buf[..n])
+            && let Ok(msg) = ServerMessage::deserialize(&buf[..n])
         {
             let _ = incoming_tx.send(msg);
         }
@@ -64,14 +64,14 @@ fn configure_client() -> anyhow::Result<ClientConfig> {
 
 async fn network_task(
     conn: QuicConnection,
-    mut outgoing_rx: mpsc::UnboundedReceiver<Message>,
-    incoming_tx: mpsc::UnboundedSender<Message>,
+    mut outgoing_rx: mpsc::UnboundedReceiver<ClientMessage>,
+    incoming_tx: mpsc::UnboundedSender<ServerMessage>,
 ) {
     loop {
         tokio::select! {
             result = conn.read_datagram() => {
                 let Ok(data) = result else { break };
-                if let Ok(msg) = Message::deserialize(&data) {
+                if let Ok(msg) = ServerMessage::deserialize(&data) {
                     let _ = incoming_tx.send(msg);
                 }
             }
@@ -82,7 +82,7 @@ async fn network_task(
 
                 tokio::spawn(async move {
                     if let Ok(data) = recv.read_to_end(MAX_CHUNK_SIZE).await
-                        && let Ok(msg) = Message::deserialize(&data)
+                        && let Ok(msg) = ServerMessage::deserialize(&data)
                     {
                         let _ = tx.send(msg);
                     }
@@ -91,7 +91,7 @@ async fn network_task(
 
             Some(msg) = outgoing_rx.recv() => {
                 match &msg {
-                    Message::Input { .. } => {
+                    ClientMessage::Input { .. } => {
                         if let Ok(bytes) = msg.serialize() {
                             let _ = conn.send_datagram(bytes.into());
                         }

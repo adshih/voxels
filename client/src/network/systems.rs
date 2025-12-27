@@ -5,8 +5,9 @@ use crate::network::{
 };
 use crate::player::{LocalPlayer, RemotePlayer};
 use bevy::prelude::*;
-use server::{Message, Server, configure_server};
 use std::net::SocketAddr;
+use voxel_net::message::ServerMessage;
+use voxel_net::{Server, configure_server};
 
 pub fn setup_connection(mut commands: Commands, settings: Res<Settings>) {
     let addr = match &settings.server_addr {
@@ -47,11 +48,11 @@ pub fn receive_updates(
 ) {
     while let Some(msg) = connection.try_recv() {
         match msg {
-            Message::ConnectAck { client_id } => {
+            ServerMessage::ConnectAck { client_id } => {
                 println!("Connected with id: {}", client_id);
                 commands.insert_resource(LocalClientId(client_id));
             }
-            Message::PlayerJoined { client_id, name } => {
+            ServerMessage::PlayerJoined { client_id, name } => {
                 if let Some(local) = &local_id
                     && local.0 == client_id
                 {
@@ -74,13 +75,13 @@ pub fn receive_updates(
 
                 players.0.insert(client_id, entity);
             }
-            Message::PlayerLeft { client_id, name: _ } => {
+            ServerMessage::PlayerLeft { client_id, name: _ } => {
                 println!("{} left", client_id);
                 if let Some(entity) = players.0.remove(&client_id) {
                     commands.entity(entity).despawn();
                 }
             }
-            Message::PositionUpdate {
+            ServerMessage::PositionUpdate {
                 client_id,
                 pos,
                 look: _,
@@ -98,14 +99,13 @@ pub fn receive_updates(
                     entity_commands.insert(Transform::from_translation(pos));
                 }
             }
-            Message::ChunkLoaded { pos, data } => {
+            ServerMessage::ChunkLoaded { pos, data } => {
                 chunk_load_queue.0.push_back((pos, data));
             }
-            Message::ChunkUnloaded { pos } => {
+            ServerMessage::ChunkUnloaded { pos } => {
                 chunk_load_queue.0.retain(|(p, _)| *p != pos);
                 chunk_unload_queue.0.push(pos);
             }
-            _ => {}
         }
     }
 }
