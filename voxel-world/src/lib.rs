@@ -86,14 +86,16 @@ impl VoxelWorld {
             if player_state.chunk_anchor != Some(chunk_pos) {
                 player_state.chunk_anchor = Some(chunk_pos);
 
-                for pos in chunks_in_radius(chunk_pos, CHUNK_RENDER_DISTANCE) {
-                    if player_state.loaded_chunks.contains(&pos) {
-                        continue;
-                    }
+                let mut chunks: Vec<_> = chunks_in_radius(chunk_pos, CHUNK_RENDER_DISTANCE)
+                    .into_iter()
+                    .filter(|pos| !player_state.loaded_chunks.contains(pos))
+                    .collect();
 
+                chunks.sort_by_key(|pos| pos.distance_squared(chunk_pos));
+
+                for pos in chunks {
                     if let Some(data) = self.terrain.get(pos) {
                         player_state.loaded_chunks.insert(pos);
-
                         self.events.push(WorldEvent::ChunkLoaded {
                             for_player: player_id,
                             pos,

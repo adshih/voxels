@@ -8,7 +8,7 @@ use mesh::*;
 use std::sync::Arc;
 use voxel_core::VoxelBuffer;
 
-use crate::{Systems, player::LocalPlayer};
+use crate::Systems;
 
 pub const MAX_MESH_TASKS: usize = 100;
 
@@ -57,30 +57,19 @@ fn load_assets(
 
 fn queue_mesh_tasks(
     mut commands: Commands,
-    chunk_data: Query<(Entity, &Transform, &ChunkData), With<NeedsMesh>>,
+    chunk_data: Query<(Entity, &ChunkData), With<NeedsMesh>>,
     active_mesh_tasks: Query<(), With<MeshTask>>,
-    player_transform: Single<&Transform, With<LocalPlayer>>,
 ) {
     let active_count = active_mesh_tasks.iter().count();
     if active_count >= MAX_MESH_TASKS {
         return;
     }
 
-    let player_pos = player_transform.translation;
     let pool = AsyncComputeTaskPool::get();
 
-    let mut chunks: Vec<_> = chunk_data.iter().collect();
-    chunks.sort_by(|a, b| {
-        let da = a.1.translation.distance_squared(player_pos);
-        let db = b.1.translation.distance_squared(player_pos);
-        da.partial_cmp(&db).unwrap()
-    });
-
-    let available = MAX_MESH_TASKS - active_count;
-    for (entity, _, ChunkData(buffer)) in chunks.into_iter().take(available) {
+    for (entity, ChunkData(buffer)) in chunk_data.iter().take(MAX_MESH_TASKS - active_count) {
         let buffer = buffer.clone();
         let task = pool.spawn(async move { generate_mesh(buffer) });
-
         commands
             .entity(entity)
             .remove::<NeedsMesh>()
