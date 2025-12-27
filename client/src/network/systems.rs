@@ -1,12 +1,18 @@
+use std::collections::VecDeque;
 use std::net::SocketAddr;
+use std::sync::Arc;
 
 use bevy::prelude::*;
 
 use server::{Message, Server, configure_server};
+use voxel_core::VoxelBuffer;
 
 use crate::Settings;
 use crate::network::{Connection, LocalClientId, PlayerEntities, TokioRuntime, remote};
 use crate::player::{LocalPlayer, RemotePlayer};
+use crate::world::{ChunkData, NeedsMesh};
+
+const MAX_CHUNK_LOAD_PER_FRAME: usize = 20;
 
 pub fn setup_connection(mut commands: Commands, settings: Res<Settings>) {
     let addr = match &settings.server_addr {
@@ -34,6 +40,9 @@ fn spawn_embedded_server() -> anyhow::Result<SocketAddr> {
     Ok(addr)
 }
 
+#[derive(Resource, Default)]
+pub struct ChunkLoadQueue(pub VecDeque<(IVec3, Arc<VoxelBuffer>)>);
+
 pub fn receive_updates(
     mut commands: Commands,
     mut connection: ResMut<Connection>,
@@ -42,6 +51,7 @@ pub fn receive_updates(
     mut materials: ResMut<Assets<StandardMaterial>>,
     local_id: Option<Res<LocalClientId>>,
     mut local_player_transform: Single<&mut Transform, With<LocalPlayer>>,
+    mut chunk_load_queue: ResMut<ChunkLoadQueue>,
 ) {
     while let Some(msg) = connection.try_recv() {
         match msg {
@@ -96,11 +106,30 @@ pub fn receive_updates(
                     entity_commands.insert(Transform::from_translation(pos));
                 }
             }
-            Message::ChunkLoaded { pos, data: _ } => {
-                println!("got chunk: {}", pos);
+            Message::ChunkLoaded { pos, data } => {
+                chunk_load_queue.0.push_back((pos, data));
             }
             _ => {}
         }
+    }
+}
+
+pub fn process_chunk_load_queue(
+    mut commands: Commands,
+    mut chunk_load_queue: ResMut<ChunkLoadQueue>,
+) {
+    for _ in 0..MAX_CHUNK_LOAD_PER_FRAME {
+        let Some((pos, data)) = chunk_load_queue.0.pop_front() else {
+            break;
+        };
+
+        let world_pos = pos.as_vec3() * data.size.as_vec3();
+
+        commands.spawn((
+            Transform::from_translation(world_pos),
+            ChunkData(data),
+            NeedsMesh,
+        ));
     }
 }
 

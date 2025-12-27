@@ -39,6 +39,10 @@ impl VoxelBuffer {
         self.voxels[i] = voxel;
     }
 
+    pub fn is_all_empty(&self) -> bool {
+        self.voxels.iter().all(|v| v.is_empty())
+    }
+
     fn index(&self, pos: UVec3) -> usize {
         (pos.x + pos.y * self.size.x + pos.z * self.size.x * self.size.y) as usize
     }

@@ -1,5 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
+    ops::RangeInclusive,
     sync::Arc,
 };
 
@@ -8,8 +9,9 @@ use noise::{core::perlin::perlin_2d, permutationtable::PermutationTable};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use voxel_core::{Voxel, VoxelBuffer};
 
-pub const CHUNK_SIZE: UVec3 = UVec3::splat(32);
-pub const CHUNK_RENDER_DISTANCE: i32 = 12;
+pub const CHUNK_SIZE: UVec3 = UVec3::splat(16);
+pub const CHUNK_RENDER_DISTANCE: i32 = 4;
+pub const Y_RANGE: RangeInclusive<i32> = -10..=10;
 
 struct TerrainGenerator {
     seed_table: PermutationTable,
@@ -92,7 +94,7 @@ impl Terrain {
         }
     }
 
-    pub fn _get(&self, pos: IVec3) -> Option<Arc<VoxelBuffer>> {
+    pub fn get(&self, pos: IVec3) -> Option<Arc<VoxelBuffer>> {
         self.chunks.get(&pos).cloned()
     }
 
@@ -124,13 +126,18 @@ pub fn world_to_chunk_pos(pos: Vec3) -> IVec3 {
     )
 }
 
+pub fn chunk_in_range(anchor: IVec3, chunk_pos: IVec3, radius: i32) -> bool {
+    let diff = chunk_pos - anchor;
+    diff.x.abs() <= radius && diff.z.abs() <= radius && Y_RANGE.contains(&chunk_pos.y)
+}
+
 pub fn chunks_in_radius(center: IVec3, radius: i32) -> Vec<IVec3> {
     let mut positions = Vec::new();
 
     for x in -radius..=radius {
-        for y in -radius..=radius {
-            for z in -radius..=radius {
-                positions.push(center + IVec3::new(x, y, z));
+        for z in -radius..=radius {
+            for y in Y_RANGE {
+                positions.push(IVec3::new(center.x + x, y, center.z + z));
             }
         }
     }

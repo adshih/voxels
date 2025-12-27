@@ -17,7 +17,10 @@ const SERVER_NAME: &str = "localhost";
 const MAX_CHUNK_SIZE: usize = 70_000; // 64kb + some overhead
 
 pub fn connect(addr: SocketAddr, player_name: String) -> anyhow::Result<(Connection, Runtime)> {
-    let rt = Runtime::new()?;
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(1)
+        .enable_all()
+        .build()?;
 
     let connection = rt.block_on(async {
         let config = configure_client()?;

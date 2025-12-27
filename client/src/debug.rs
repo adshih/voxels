@@ -1,8 +1,9 @@
 use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use bevy::prelude::*;
 
+use crate::network::systems::ChunkLoadQueue;
 use crate::player::LocalPlayer;
-use crate::world::ChunkManager;
+use crate::world::{MAX_MESH_TASKS, MeshReady, MeshTask, NeedsMesh};
 
 #[derive(Component)]
 struct DebugPanel;
@@ -17,7 +18,7 @@ struct PlayerText;
 struct CameraText;
 
 #[derive(Component)]
-struct ChunkManagerText;
+struct ChunkText;
 
 #[derive(Bundle)]
 struct DebugTextBundle {
@@ -59,7 +60,7 @@ impl Plugin for DebugPlugin {
                 debug_performance,
                 debug_player_position,
                 debug_camera_info,
-                debug_chunk_manager,
+                debug_chunks,
             )
                 .run_if(is_debug),
         )
@@ -108,7 +109,7 @@ fn setup_debug_ui(mut commands: Commands) {
             parent.spawn((DebugTextBundle::default(), PerformanceText));
             parent.spawn((DebugTextBundle::default(), PlayerText));
             parent.spawn((DebugTextBundle::default(), CameraText));
-            parent.spawn((DebugTextBundle::default(), ChunkManagerText));
+            parent.spawn((DebugTextBundle::default(), ChunkText));
         });
 }
 
@@ -158,13 +159,25 @@ fn debug_camera_info(
     );
 }
 
-fn debug_chunk_manager(
-    chunk_manager: Res<ChunkManager>,
-    mut text: Single<&mut Text, With<ChunkManagerText>>,
+fn debug_chunks(
+    needs_mesh: Query<(), With<NeedsMesh>>,
+    mesh_tasks: Query<(), With<MeshTask>>,
+    mesh_ready: Query<(), With<MeshReady>>,
+    chunk_load_queue: Res<ChunkLoadQueue>,
+    mut text: Single<&mut Text, With<ChunkText>>,
 ) {
     text.0 = format!(
-        "Chunk Manager:\nPending Operations: {}\nLoaded: {}",
-        chunk_manager.pending_ops.len(),
-        chunk_manager.loaded_chunks.len(),
+        r#"
+Chunks:
+    ChunkLoadQueue: {},
+    NeedsMesh: {},
+    MeshTask: {}/{}
+    MeshReady: {}
+        "#,
+        chunk_load_queue.0.len(),
+        needs_mesh.iter().count(),
+        mesh_tasks.iter().count(),
+        MAX_MESH_TASKS,
+        mesh_ready.iter().count(),
     );
 }

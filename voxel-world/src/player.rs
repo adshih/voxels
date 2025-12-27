@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use glam::{IVec3, Vec3};
 use serde::{Deserialize, Serialize};
 
@@ -13,6 +15,7 @@ pub struct PlayerState {
     pub look: Vec3,
     pub input: PlayerInput,
     pub chunk_anchor: Option<IVec3>,
+    pub loaded_chunks: HashSet<IVec3>,
 }
 
 impl Default for PlayerState {
@@ -22,6 +25,7 @@ impl Default for PlayerState {
             look: Vec3::default(),
             input: PlayerInput::default(),
             chunk_anchor: None,
+            loaded_chunks: HashSet::new(),
         }
     }
 }

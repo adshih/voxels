@@ -238,6 +238,10 @@ async fn handle_event(state: &Arc<RwLock<ServerState>>, event: WorldEvent) {
             pos,
             data,
         } => {
+            if data.is_all_empty() {
+                return;
+            }
+
             let conn = {
                 let state = state.read().await;
                 state.clients.get(&for_player).map(|c| c.conn.clone())

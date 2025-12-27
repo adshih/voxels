@@ -1,6 +1,7 @@
+use std::sync::Arc;
+
 use glam::{IVec3, Vec3};
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 use voxel_core::VoxelBuffer;
 use voxel_world::player::PlayerInput;
 

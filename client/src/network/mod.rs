@@ -5,9 +5,11 @@ use tokio::sync::mpsc;
 
 use server::Message;
 
+use crate::network::systems::ChunkLoadQueue;
+
 mod cert;
 pub mod remote;
-mod systems;
+pub mod systems;
 
 #[derive(Default, Resource)]
 pub struct PlayerEntities {
@@ -41,10 +43,15 @@ pub struct NetworkPlugin;
 impl Plugin for NetworkPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<PlayerEntities>()
+            .init_resource::<ChunkLoadQueue>()
             .add_systems(Startup, systems::setup_connection)
             .add_systems(
                 Update,
-                (systems::receive_updates, systems::send_player_input),
+                (
+                    systems::receive_updates,
+                    systems::send_player_input,
+                    systems::process_chunk_load_queue,
+                ),
             );
     }
 }

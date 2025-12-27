@@ -5,7 +5,9 @@ use crate::{
     commands::WorldCommand,
     events::WorldEvent,
     player::{PlayerInput, PlayerState},
-    terrain::{CHUNK_RENDER_DISTANCE, Terrain, chunks_in_radius, world_to_chunk_pos},
+    terrain::{
+        CHUNK_RENDER_DISTANCE, Terrain, chunk_in_range, chunks_in_radius, world_to_chunk_pos,
+    },
 };
 
 pub mod commands;
@@ -65,14 +67,28 @@ impl VoxelWorld {
     }
 
     fn sync_player_chunks(&mut self) {
-        for player in &mut self.players.values_mut() {
-            let chunk_pos = world_to_chunk_pos(player.pos);
+        for (&player_id, player_state) in &mut self.players.iter_mut() {
+            let chunk_pos = world_to_chunk_pos(player_state.pos);
 
-            if player.chunk_anchor != Some(chunk_pos) {
-                player.chunk_anchor = Some(chunk_pos);
+            if player_state.chunk_anchor != Some(chunk_pos) {
+                player_state.chunk_anchor = Some(chunk_pos);
 
                 for pos in chunks_in_radius(chunk_pos, CHUNK_RENDER_DISTANCE) {
-                    self.terrain.request(pos);
+                    if player_state.loaded_chunks.contains(&pos) {
+                        continue;
+                    }
+
+                    if let Some(data) = self.terrain.get(pos) {
+                        player_state.loaded_chunks.insert(pos);
+
+                        self.events.push(WorldEvent::ChunkLoaded {
+                            for_player: player_id,
+                            pos,
+                            data,
+                        });
+                    } else {
+                        self.terrain.request(pos);
+                    }
                 }
             }
         }
@@ -126,12 +142,7 @@ impl VoxelWorld {
 
 fn player_needs_chunk(player: &PlayerState, chunk_pos: IVec3) -> bool {
     match player.chunk_anchor {
-        Some(anchor) => {
-            let diff = chunk_pos - anchor;
-            diff.x.abs() <= CHUNK_RENDER_DISTANCE
-                && diff.y.abs() <= CHUNK_RENDER_DISTANCE
-                && diff.z.abs() <= CHUNK_RENDER_DISTANCE
-        }
+        Some(anchor) => chunk_in_range(anchor, chunk_pos, CHUNK_RENDER_DISTANCE),
         None => false,
     }
 }

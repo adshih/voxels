@@ -1,22 +1,15 @@
-use super::*;
 use bevy::{
     asset::RenderAssetUsages,
     mesh::{Indices, PrimitiveTopology},
     prelude::*,
 };
-use voxel_core::Voxel;
-
-const CUBE_FACES: [CubeFace; 6] = [
-    CubeFace::Front,
-    CubeFace::Back,
-    CubeFace::Right,
-    CubeFace::Left,
-    CubeFace::Top,
-    CubeFace::Bottom,
-];
+use std::sync::Arc;
+use voxel_core::{Voxel, VoxelBuffer};
 
 const ATLAS_SIZE: f32 = 16.0;
 const TEXTURE_SIZE: f32 = 1.0 / ATLAS_SIZE;
+const BASE_UVS: [[f32; 2]; 4] = [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]];
+const QUAD_INDICES: [u32; 6] = [0, 1, 2, 0, 2, 3];
 
 #[derive(Clone, Copy)]
 enum CubeFace {
@@ -28,20 +21,33 @@ enum CubeFace {
     Bottom,
 }
 
+const CUBE_FACES: [CubeFace; 6] = [
+    CubeFace::Front,
+    CubeFace::Back,
+    CubeFace::Right,
+    CubeFace::Left,
+    CubeFace::Top,
+    CubeFace::Bottom,
+];
+
 impl CubeFace {
-    fn normal(self) -> [f32; 3] {
+    fn offset(self) -> IVec3 {
         match self {
-            CubeFace::Front => [0.0, 0.0, 1.0],
-            CubeFace::Back => [0.0, 0.0, -1.0],
-            CubeFace::Right => [1.0, 0.0, 0.0],
-            CubeFace::Left => [-1.0, 0.0, 0.0],
-            CubeFace::Top => [0.0, 1.0, 0.0],
-            CubeFace::Bottom => [0.0, -1.0, 0.0],
+            CubeFace::Front => IVec3::new(0, 0, 1),
+            CubeFace::Back => IVec3::new(0, 0, -1),
+            CubeFace::Right => IVec3::new(1, 0, 0),
+            CubeFace::Left => IVec3::new(-1, 0, 0),
+            CubeFace::Top => IVec3::new(0, 1, 0),
+            CubeFace::Bottom => IVec3::new(0, -1, 0),
         }
     }
 
-    fn vertices(self, pos: [f32; 3]) -> [[f32; 3]; 4] {
-        let [x, y, z] = pos;
+    fn normal(self) -> [f32; 3] {
+        self.offset().as_vec3().to_array()
+    }
+
+    fn vertices(self, pos: Vec3) -> [[f32; 3]; 4] {
+        let Vec3 { x, y, z } = pos;
         match self {
             CubeFace::Front => [
                 [x, y, z + 1.0],
@@ -81,44 +87,31 @@ impl CubeFace {
             ],
         }
     }
-
-    fn neighbor_offset(self) -> (i32, i32, i32) {
-        match self {
-            CubeFace::Front => (0, 0, 1),
-            CubeFace::Back => (0, 0, -1),
-            CubeFace::Right => (1, 0, 0),
-            CubeFace::Left => (-1, 0, 0),
-            CubeFace::Top => (0, 1, 0),
-            CubeFace::Bottom => (0, -1, 0),
-        }
-    }
-
-    fn base_uvs(self) -> [[f32; 2]; 4] {
-        [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]
-    }
 }
 
-pub fn generate_mesh(voxels: ChunkVoxels) -> Option<Mesh> {
+pub fn generate_mesh(buffer: Arc<VoxelBuffer>) -> Option<Mesh> {
     let mut positions = Vec::new();
     let mut indices = Vec::new();
     let mut normals = Vec::new();
     let mut uvs = Vec::new();
 
-    for x in 0..CHUNK_SIZE {
-        for y in 0..CHUNK_SIZE {
-            for z in 0..CHUNK_SIZE {
-                let pos = UVec3::new(x as u32, y as u32, z as u32);
+    let size = buffer.size;
 
-                let voxel = voxels.data.get(pos);
+    for x in 0..size.x {
+        for y in 0..size.y {
+            for z in 0..size.z {
+                let pos = UVec3::new(x, y, z);
+                let voxel = buffer.get(pos);
+
                 if !voxel.is_empty() {
                     for face in CUBE_FACES {
-                        if should_render_face(&voxels, x, y, z, face) {
-                            add_face_to_mesh(
+                        if should_render_face(&buffer, pos, face) {
+                            add_face(
                                 &mut positions,
                                 &mut indices,
                                 &mut normals,
                                 &mut uvs,
-                                [x as f32, y as f32, z as f32],
+                                pos.as_vec3(),
                                 face,
                                 voxel,
                             );
@@ -145,69 +138,52 @@ pub fn generate_mesh(voxels: ChunkVoxels) -> Option<Mesh> {
     )
 }
 
-fn should_render_face(voxels: &ChunkVoxels, x: usize, y: usize, z: usize, face: CubeFace) -> bool {
-    let (dx, dy, dz) = face.neighbor_offset();
-    let neighbor_x = x as i32 + dx;
-    let neighbor_y = y as i32 + dy;
-    let neighbor_z = z as i32 + dz;
+fn should_render_face(voxels: &VoxelBuffer, pos: UVec3, face: CubeFace) -> bool {
+    let neighbor = pos.as_ivec3() + face.offset();
 
-    if neighbor_x < 0
-        || neighbor_x >= CHUNK_SIZE as i32
-        || neighbor_y < 0
-        || neighbor_y >= CHUNK_SIZE as i32
-        || neighbor_z < 0
-        || neighbor_z >= CHUNK_SIZE as i32
+    if neighbor.x < 0
+        || neighbor.x >= voxels.size.x as i32
+        || neighbor.y < 0
+        || neighbor.y >= voxels.size.y as i32
+        || neighbor.z < 0
+        || neighbor.z >= voxels.size.z as i32
     {
         return true;
     }
 
-    let pos = UVec3::new(neighbor_x as u32, neighbor_y as u32, neighbor_z as u32);
-
-    let neighbor_voxel = voxels.data.get(pos);
-    neighbor_voxel.is_empty()
+    voxels.get(neighbor.as_uvec3()).is_empty()
 }
 
-fn add_face_to_mesh(
+fn add_face(
     positions: &mut Vec<[f32; 3]>,
     indices: &mut Vec<u32>,
     normals: &mut Vec<[f32; 3]>,
     uvs: &mut Vec<[f32; 2]>,
-    pos: [f32; 3],
+    pos: Vec3,
     face: CubeFace,
-    voxel_type: Voxel,
+    voxel: Voxel,
 ) {
     let base_index = positions.len() as u32;
-    let vertices = face.vertices(pos);
     let normal = face.normal();
-    let base_uvs = face.base_uvs();
-    let texture_coords = get_texture_coords(voxel_type);
+    let texture_coords = get_texture_coords(voxel);
 
-    positions.extend_from_slice(&vertices);
+    positions.extend_from_slice(&face.vertices(pos));
+    normals.extend([normal; 4]);
 
-    for _ in 0..4 {
-        normals.push(normal);
-    }
-
-    for &base_uv in &base_uvs {
-        let atlas_uv = [
+    for &base_uv in &BASE_UVS {
+        uvs.push([
             texture_coords.0 + base_uv[0] * TEXTURE_SIZE,
             texture_coords.1 + base_uv[1] * TEXTURE_SIZE,
-        ];
-        uvs.push(atlas_uv);
+        ]);
     }
 
-    indices.extend_from_slice(&[
-        base_index,
-        base_index + 1,
-        base_index + 2,
-        base_index,
-        base_index + 2,
-        base_index + 3,
-    ]);
+    for &offset in &QUAD_INDICES {
+        indices.push(base_index + offset);
+    }
 }
 
-fn get_texture_coords(voxel_type: Voxel) -> (f32, f32) {
-    match voxel_type {
+fn get_texture_coords(voxel: Voxel) -> (f32, f32) {
+    match voxel {
         Voxel::STONE => (0.0 * TEXTURE_SIZE, 0.0 * TEXTURE_SIZE),
         Voxel::DIRT => (1.0 * TEXTURE_SIZE, 0.0 * TEXTURE_SIZE),
         Voxel::EMPTY => (0.0, 0.0),
