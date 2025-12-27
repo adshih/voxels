@@ -14,4 +14,8 @@ pub enum WorldEvent {
         pos: IVec3,
         data: Arc<VoxelBuffer>,
     },
+    ChunkUnloaded {
+        for_player: u32,
+        pos: IVec3,
+    },
 }

@@ -35,6 +35,9 @@ pub enum Message {
         pos: IVec3,
         data: Arc<VoxelBuffer>,
     },
+    ChunkUnloaded {
+        pos: IVec3,
+    },
 }
 
 impl Message {

@@ -5,16 +5,18 @@ use tokio::sync::mpsc;
 
 use server::Message;
 
-use crate::network::systems::ChunkLoadQueue;
+use crate::Systems;
+use crate::network::systems::{ChunkLoadQueue, ChunkUnloadQueue};
 
 mod cert;
 pub mod remote;
 pub mod systems;
 
 #[derive(Default, Resource)]
-pub struct PlayerEntities {
-    pub map: HashMap<u32, Entity>,
-}
+pub struct PlayerEntities(pub HashMap<u32, Entity>);
+
+#[derive(Default, Resource)]
+pub struct ChunkEntities(pub HashMap<IVec3, Entity>);
 
 #[derive(Resource)]
 pub struct LocalClientId(pub u32);
@@ -44,6 +46,8 @@ impl Plugin for NetworkPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<PlayerEntities>()
             .init_resource::<ChunkLoadQueue>()
+            .init_resource::<ChunkUnloadQueue>()
+            .init_resource::<ChunkEntities>()
             .add_systems(Startup, systems::setup_connection)
             .add_systems(
                 Update,
@@ -51,7 +55,9 @@ impl Plugin for NetworkPlugin {
                     systems::receive_updates,
                     systems::send_player_input,
                     systems::process_chunk_load_queue,
-                ),
+                    systems::process_chunk_unload_queue,
+                )
+                    .in_set(Systems::Network),
             );
     }
 }

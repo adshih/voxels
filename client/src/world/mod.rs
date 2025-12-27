@@ -8,7 +8,7 @@ use mesh::*;
 use std::sync::Arc;
 use voxel_core::VoxelBuffer;
 
-use crate::player::LocalPlayer;
+use crate::{Systems, player::LocalPlayer};
 
 pub const MAX_MESH_TASKS: usize = 100;
 
@@ -33,7 +33,9 @@ impl Plugin for WorldPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, load_assets).add_systems(
             Update,
-            (queue_mesh_tasks, collect_mesh_tasks, upload_meshes).chain(),
+            (queue_mesh_tasks, collect_mesh_tasks, upload_meshes)
+                .chain()
+                .in_set(Systems::Mesh),
         );
     }
 }

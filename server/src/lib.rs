@@ -254,6 +254,17 @@ async fn handle_event(state: &Arc<RwLock<ServerState>>, event: WorldEvent) {
                 });
             }
         }
+        WorldEvent::ChunkUnloaded { for_player, pos } => {
+            let conn = {
+                let state = state.read().await;
+                state.clients.get(&for_player).map(|c| c.conn.clone())
+            };
+
+            if let Some(conn) = conn {
+                let msg = Message::ChunkUnloaded { pos };
+                send_reliable(&conn, &msg).await;
+            }
+        }
     }
 }
 

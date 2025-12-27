@@ -10,7 +10,7 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use voxel_core::{Voxel, VoxelBuffer};
 
 pub const CHUNK_SIZE: UVec3 = UVec3::splat(16);
-pub const CHUNK_RENDER_DISTANCE: i32 = 4;
+pub const CHUNK_RENDER_DISTANCE: i32 = 10;
 pub const Y_RANGE: RangeInclusive<i32> = -10..=10;
 
 struct TerrainGenerator {

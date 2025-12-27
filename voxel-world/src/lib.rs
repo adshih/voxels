@@ -70,6 +70,19 @@ impl VoxelWorld {
         for (&player_id, player_state) in &mut self.players.iter_mut() {
             let chunk_pos = world_to_chunk_pos(player_state.pos);
 
+            // prune distant chunks
+            let events = &mut self.events;
+            player_state.loaded_chunks.retain(|&pos| {
+                let keep = chunk_in_range(chunk_pos, pos, CHUNK_RENDER_DISTANCE);
+                if !keep {
+                    events.push(WorldEvent::ChunkUnloaded {
+                        for_player: player_id,
+                        pos,
+                    });
+                }
+                keep
+            });
+
             if player_state.chunk_anchor != Some(chunk_pos) {
                 player_state.chunk_anchor = Some(chunk_pos);
 
@@ -96,8 +109,9 @@ impl VoxelWorld {
 
     fn poll_terrain(&mut self) {
         for (pos, data) in self.terrain.poll() {
-            for (&player_id, player) in &self.players {
-                if player_needs_chunk(player, pos) {
+            for (&player_id, player) in &mut self.players {
+                if player_needs_chunk(player, pos) && !player.loaded_chunks.contains(&pos) {
+                    player.loaded_chunks.insert(pos);
                     self.events.push(WorldEvent::ChunkLoaded {
                         for_player: player_id,
                         pos,

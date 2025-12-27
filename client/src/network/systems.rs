@@ -8,7 +8,9 @@ use server::{Message, Server, configure_server};
 use voxel_core::VoxelBuffer;
 
 use crate::Settings;
-use crate::network::{Connection, LocalClientId, PlayerEntities, TokioRuntime, remote};
+use crate::network::{
+    ChunkEntities, Connection, LocalClientId, PlayerEntities, TokioRuntime, remote,
+};
 use crate::player::{LocalPlayer, RemotePlayer};
 use crate::world::{ChunkData, NeedsMesh};
 
@@ -43,6 +45,9 @@ fn spawn_embedded_server() -> anyhow::Result<SocketAddr> {
 #[derive(Resource, Default)]
 pub struct ChunkLoadQueue(pub VecDeque<(IVec3, Arc<VoxelBuffer>)>);
 
+#[derive(Resource, Default)]
+pub struct ChunkUnloadQueue(pub Vec<IVec3>);
+
 pub fn receive_updates(
     mut commands: Commands,
     mut connection: ResMut<Connection>,
@@ -52,6 +57,7 @@ pub fn receive_updates(
     local_id: Option<Res<LocalClientId>>,
     mut local_player_transform: Single<&mut Transform, With<LocalPlayer>>,
     mut chunk_load_queue: ResMut<ChunkLoadQueue>,
+    mut chunk_unload_queue: ResMut<ChunkUnloadQueue>,
 ) {
     while let Some(msg) = connection.try_recv() {
         match msg {
@@ -80,11 +86,11 @@ pub fn receive_updates(
                     ))
                     .id();
 
-                players.map.insert(client_id, entity);
+                players.0.insert(client_id, entity);
             }
             Message::PlayerLeft { client_id, name: _ } => {
                 println!("{} left", client_id);
-                if let Some(entity) = players.map.remove(&client_id) {
+                if let Some(entity) = players.0.remove(&client_id) {
                     commands.entity(entity).despawn();
                 }
             }
@@ -100,7 +106,7 @@ pub fn receive_updates(
                     continue;
                 }
 
-                if let Some(&entity) = players.map.get(&client_id)
+                if let Some(&entity) = players.0.get(&client_id)
                     && let Ok(mut entity_commands) = commands.get_entity(entity)
                 {
                     entity_commands.insert(Transform::from_translation(pos));
@@ -108,6 +114,10 @@ pub fn receive_updates(
             }
             Message::ChunkLoaded { pos, data } => {
                 chunk_load_queue.0.push_back((pos, data));
+            }
+            Message::ChunkUnloaded { pos } => {
+                chunk_load_queue.0.retain(|(p, _)| *p != pos);
+                chunk_unload_queue.0.push(pos);
             }
             _ => {}
         }
@@ -117,6 +127,7 @@ pub fn receive_updates(
 pub fn process_chunk_load_queue(
     mut commands: Commands,
     mut chunk_load_queue: ResMut<ChunkLoadQueue>,
+    mut chunk_entities: ResMut<ChunkEntities>,
 ) {
     for _ in 0..MAX_CHUNK_LOAD_PER_FRAME {
         let Some((pos, data)) = chunk_load_queue.0.pop_front() else {
@@ -125,11 +136,27 @@ pub fn process_chunk_load_queue(
 
         let world_pos = pos.as_vec3() * data.size.as_vec3();
 
-        commands.spawn((
-            Transform::from_translation(world_pos),
-            ChunkData(data),
-            NeedsMesh,
-        ));
+        let entity = commands
+            .spawn((
+                Transform::from_translation(world_pos),
+                ChunkData(data),
+                NeedsMesh,
+            ))
+            .id();
+
+        chunk_entities.0.insert(pos, entity);
+    }
+}
+
+pub fn process_chunk_unload_queue(
+    mut commands: Commands,
+    mut chunk_unload_queue: ResMut<ChunkUnloadQueue>,
+    mut chunk_entities: ResMut<ChunkEntities>,
+) {
+    for pos in chunk_unload_queue.0.drain(..) {
+        if let Some(entity) = chunk_entities.0.remove(&pos) {
+            commands.entity(entity).despawn();
+        }
     }
 }
 

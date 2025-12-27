@@ -22,10 +22,12 @@ enum Systems {
     Input,
     Movement,
     PostMovement,
+    Network,
+    Mesh,
 }
 
 #[derive(Default, Debug, Resource)]
-struct Settings {
+pub struct Settings {
     server_addr: Option<String>,
     player_name: String,
 }
@@ -64,6 +66,8 @@ fn main() {
             Systems::Input.run_if(is_cursor_locked),
             Systems::Movement.after(Systems::Input),
             Systems::PostMovement.after(Systems::Movement),
+            Systems::Network.after(Systems::PostMovement),
+            Systems::Mesh.after(Systems::Network),
         ),
     )
     .add_plugins((
