@@ -1,20 +1,12 @@
-use std::collections::VecDeque;
-use std::net::SocketAddr;
-use std::sync::Arc;
-
-use bevy::prelude::*;
-
-use server::{Message, Server, configure_server};
-use voxel_core::VoxelBuffer;
-
 use crate::Settings;
 use crate::network::{
-    ChunkEntities, Connection, LocalClientId, PlayerEntities, TokioRuntime, remote,
+    ChunkLoadQueue, ChunkUnloadQueue, Connection, LocalClientId, PlayerEntities, TokioRuntime,
+    remote,
 };
 use crate::player::{LocalPlayer, RemotePlayer};
-use crate::world::{ChunkData, NeedsMesh};
-
-const MAX_CHUNK_LOAD_PER_FRAME: usize = 20;
+use bevy::prelude::*;
+use server::{Message, Server, configure_server};
+use std::net::SocketAddr;
 
 pub fn setup_connection(mut commands: Commands, settings: Res<Settings>) {
     let addr = match &settings.server_addr {
@@ -41,12 +33,6 @@ fn spawn_embedded_server() -> anyhow::Result<SocketAddr> {
 
     Ok(addr)
 }
-
-#[derive(Resource, Default)]
-pub struct ChunkLoadQueue(pub VecDeque<(IVec3, Arc<VoxelBuffer>)>);
-
-#[derive(Resource, Default)]
-pub struct ChunkUnloadQueue(pub Vec<IVec3>);
 
 pub fn receive_updates(
     mut commands: Commands,
@@ -122,46 +108,4 @@ pub fn receive_updates(
             _ => {}
         }
     }
-}
-
-pub fn process_chunk_load_queue(
-    mut commands: Commands,
-    mut chunk_load_queue: ResMut<ChunkLoadQueue>,
-    mut chunk_entities: ResMut<ChunkEntities>,
-) {
-    for _ in 0..MAX_CHUNK_LOAD_PER_FRAME {
-        let Some((pos, data)) = chunk_load_queue.0.pop_front() else {
-            break;
-        };
-
-        let world_pos = pos.as_vec3() * data.size.as_vec3();
-
-        let entity = commands
-            .spawn((
-                Transform::from_translation(world_pos),
-                ChunkData(data),
-                NeedsMesh,
-            ))
-            .id();
-
-        chunk_entities.0.insert(pos, entity);
-    }
-}
-
-pub fn process_chunk_unload_queue(
-    mut commands: Commands,
-    mut chunk_unload_queue: ResMut<ChunkUnloadQueue>,
-    mut chunk_entities: ResMut<ChunkEntities>,
-) {
-    for pos in chunk_unload_queue.0.drain(..) {
-        if let Some(entity) = chunk_entities.0.remove(&pos) {
-            commands.entity(entity).despawn();
-        }
-    }
-}
-
-pub fn send_player_input(connection: Res<Connection>, local_player: Single<&LocalPlayer>) {
-    connection.send(Message::Input {
-        input: local_player.input.clone(),
-    });
 }

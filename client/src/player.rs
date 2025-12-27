@@ -1,7 +1,8 @@
 use bevy::prelude::*;
+use server::Message;
 use voxel_world::player::PlayerInput;
 
-use crate::Systems;
+use crate::{Systems, network::Connection};
 
 #[allow(dead_code)]
 #[derive(Component)]
@@ -21,8 +22,12 @@ pub struct PlayerPlugin;
 
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, spawn_player)
-            .add_systems(Update, read_input.in_set(Systems::Input));
+        app.add_systems(Startup, spawn_player).add_systems(
+            Update,
+            (read_input, send_player_input)
+                .chain()
+                .in_set(Systems::Input),
+        );
     }
 }
 
@@ -62,4 +67,10 @@ fn read_input(keyboard: Res<ButtonInput<KeyCode>>, mut local_player: Single<&mut
 
     local_player.input.dir = input_dir;
     local_player.input.sprint = sprint;
+}
+
+pub fn send_player_input(connection: Res<Connection>, local_player: Single<&LocalPlayer>) {
+    connection.send(Message::Input {
+        input: local_player.input.clone(),
+    });
 }

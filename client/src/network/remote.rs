@@ -1,17 +1,12 @@
+use super::Connection;
+use crate::network::cert::SkipServerVerification;
 use quinn::crypto::rustls::QuicClientConfig;
 use quinn::{ClientConfig, Connection as QuicConnection, Endpoint, rustls};
-use tokio::runtime::Runtime;
-
+use server::Message;
 use std::net::SocketAddr;
 use std::sync::Arc;
-
-use server::Message;
-
+use tokio::runtime::Runtime;
 use tokio::sync::mpsc;
-
-use crate::network::cert::SkipServerVerification;
-
-use super::Connection;
 
 const SERVER_NAME: &str = "localhost";
 const MAX_CHUNK_SIZE: usize = 70_000; // 64kb + some overhead

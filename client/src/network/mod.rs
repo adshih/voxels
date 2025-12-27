@@ -1,25 +1,23 @@
-use bevy::prelude::*;
-use std::collections::HashMap;
-use tokio::runtime::Runtime;
-use tokio::sync::mpsc;
-
-use server::Message;
+mod cert;
+mod remote;
+mod systems;
 
 use crate::Systems;
-use crate::network::systems::{ChunkLoadQueue, ChunkUnloadQueue};
-
-mod cert;
-pub mod remote;
-pub mod systems;
-
-#[derive(Default, Resource)]
-pub struct PlayerEntities(pub HashMap<u32, Entity>);
-
-#[derive(Default, Resource)]
-pub struct ChunkEntities(pub HashMap<IVec3, Entity>);
+use crate::network::systems::{receive_updates, setup_connection};
+use crate::world::chunk::ChunkEntities;
+use bevy::prelude::*;
+use server::Message;
+use std::collections::{HashMap, VecDeque};
+use std::sync::Arc;
+use tokio::runtime::Runtime;
+use tokio::sync::mpsc;
+use voxel_core::VoxelBuffer;
 
 #[derive(Resource)]
 pub struct LocalClientId(pub u32);
+
+#[derive(Default, Resource)]
+pub struct PlayerEntities(pub HashMap<u32, Entity>);
 
 #[derive(Resource)]
 pub struct TokioRuntime(#[allow(dead_code)] pub Runtime);
@@ -40,6 +38,12 @@ impl Connection {
     }
 }
 
+#[derive(Resource, Default)]
+pub struct ChunkLoadQueue(pub VecDeque<(IVec3, Arc<VoxelBuffer>)>);
+
+#[derive(Resource, Default)]
+pub struct ChunkUnloadQueue(pub Vec<IVec3>);
+
 pub struct NetworkPlugin;
 
 impl Plugin for NetworkPlugin {
@@ -48,16 +52,7 @@ impl Plugin for NetworkPlugin {
             .init_resource::<ChunkLoadQueue>()
             .init_resource::<ChunkUnloadQueue>()
             .init_resource::<ChunkEntities>()
-            .add_systems(Startup, systems::setup_connection)
-            .add_systems(
-                Update,
-                (
-                    systems::receive_updates,
-                    systems::send_player_input,
-                    systems::process_chunk_load_queue,
-                    systems::process_chunk_unload_queue,
-                )
-                    .in_set(Systems::Network),
-            );
+            .add_systems(Startup, setup_connection)
+            .add_systems(Update, receive_updates.in_set(Systems::Network));
     }
 }

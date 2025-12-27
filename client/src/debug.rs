@@ -1,9 +1,10 @@
 use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use bevy::prelude::*;
 
-use crate::network::systems::ChunkLoadQueue;
+use crate::network::ChunkLoadQueue;
 use crate::player::LocalPlayer;
-use crate::world::{MAX_MESH_TASKS, MeshReady, MeshTask, NeedsMesh};
+use crate::world::MAX_MESH_TASKS;
+use crate::world::mesh::{MeshReady, MeshTask, NeedsMesh};
 
 #[derive(Component)]
 struct DebugPanel;
