@@ -1,5 +1,8 @@
 use crate::{
-    network::{ChunkLoadQueue, ChunkUnloadQueue},
+    network::{
+        ChunkLoadQueue, ChunkUnloadQueue,
+        events::{ChunkLoaded, ChunkUnloaded},
+    },
     world::{MAX_CHUNK_LOAD_PER_FRAME, NeedsMesh},
 };
 use bevy::prelude::*;
@@ -11,6 +14,21 @@ pub struct ChunkData(pub Arc<VoxelBuffer>);
 
 #[derive(Default, Resource)]
 pub struct ChunkEntities(pub HashMap<IVec3, Entity>);
+
+pub fn on_chunk_loaded(on: On<ChunkLoaded>, mut queue: ResMut<ChunkLoadQueue>) {
+    let event = on.event();
+    queue.0.push_back((event.pos, event.data.clone()));
+}
+
+pub fn on_chunk_unloaded(
+    on: On<ChunkUnloaded>,
+    mut load_queue: ResMut<ChunkLoadQueue>,
+    mut unload_queue: ResMut<ChunkUnloadQueue>,
+) {
+    let event = on.event();
+    load_queue.0.retain(|(p, _)| *p != event.pos);
+    unload_queue.0.push(event.pos);
+}
 
 pub fn process_chunk_load_queue(
     mut commands: Commands,

@@ -109,7 +109,7 @@ async fn handle_player(conn: Connection, state: Arc<RwLock<ServerState>>) {
                            let id = register_player(&state).await;
                            client_id = Some(id);
 
-                           send_connect_ack(id, &mut send).await;
+                           send_connect_ack(id, name.clone(), &mut send).await;
                            send_existing_players(&conn, &state).await;
 
                            insert_client(id, conn.clone(), name, &state).await;
@@ -138,8 +138,8 @@ async fn register_player(state: &Arc<RwLock<ServerState>>) -> u32 {
     id
 }
 
-async fn send_connect_ack(id: u32, send: &mut quinn::SendStream) {
-    let msg = ServerMessage::ConnectAck { client_id: id };
+async fn send_connect_ack(id: u32, name: String, send: &mut quinn::SendStream) {
+    let msg = ServerMessage::ConnectAck { id, name };
     if let Ok(bytes) = msg.serialize() {
         let _ = send.write_all(&bytes).await;
         let _ = send.finish();
@@ -153,7 +153,7 @@ async fn send_existing_players(conn: &Connection, state: &Arc<RwLock<ServerState
         send_reliable(
             conn,
             &ServerMessage::PlayerJoined {
-                client_id: id,
+                id,
                 name: client.name.clone(),
             },
         )
@@ -169,7 +169,7 @@ async fn broadcast_player_joined(id: u32, name: &str, state: &Arc<RwLock<ServerS
             send_reliable(
                 &client.conn,
                 &ServerMessage::PlayerJoined {
-                    client_id: id,
+                    id,
                     name: name.to_string(),
                 },
             )
@@ -209,7 +209,7 @@ async fn remove_client(id: u32, state: &Arc<RwLock<ServerState>>) {
     println!("{} (id: {}) disconnected", client.name, id);
 
     let msg = ServerMessage::PlayerLeft {
-        client_id: id,
+        id,
         name: client.name,
     };
     for client in state.clients.values() {
@@ -221,11 +221,7 @@ async fn handle_event(state: &Arc<RwLock<ServerState>>, event: WorldEvent) {
     match event {
         WorldEvent::PlayerMoved { id, pos, look } => {
             let state = state.read().await;
-            let msg = ServerMessage::PositionUpdate {
-                client_id: id,
-                pos,
-                look,
-            };
+            let msg = ServerMessage::PositionUpdate { id, pos, look };
 
             let bytes = msg.serialize().unwrap();
 

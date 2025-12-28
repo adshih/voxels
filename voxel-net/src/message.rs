@@ -13,29 +13,12 @@ pub enum ClientMessage {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum ServerMessage {
-    ConnectAck {
-        client_id: u32,
-    },
-    PlayerJoined {
-        client_id: u32,
-        name: String,
-    },
-    PlayerLeft {
-        client_id: u32,
-        name: String,
-    },
-    PositionUpdate {
-        client_id: u32,
-        pos: Vec3,
-        look: Vec3,
-    },
-    ChunkLoaded {
-        pos: IVec3,
-        data: Arc<VoxelBuffer>,
-    },
-    ChunkUnloaded {
-        pos: IVec3,
-    },
+    ConnectAck { id: u32, name: String },
+    PlayerJoined { id: u32, name: String },
+    PlayerLeft { id: u32, name: String },
+    PositionUpdate { id: u32, pos: Vec3, look: Vec3 },
+    ChunkLoaded { pos: IVec3, data: Arc<VoxelBuffer> },
+    ChunkUnloaded { pos: IVec3 },
 }
 
 pub trait WireMessage: Sized {

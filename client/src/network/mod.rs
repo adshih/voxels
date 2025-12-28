@@ -1,23 +1,17 @@
 mod cert;
+pub mod events;
 mod remote;
-mod systems;
 
-use crate::Systems;
-use crate::network::systems::{receive_updates, setup_connection};
-use crate::world::chunk::ChunkEntities;
+use crate::network::events::*;
+use crate::{Settings, world::chunk::ChunkEntities};
 use bevy::prelude::*;
-use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
+use std::{collections::VecDeque, net::SocketAddr};
 use tokio::runtime::Runtime;
 use tokio::sync::mpsc;
 use voxel_core::VoxelBuffer;
 use voxel_net::message::{ClientMessage, ServerMessage};
-
-#[derive(Resource)]
-pub struct LocalClientId(pub u32);
-
-#[derive(Default, Resource)]
-pub struct PlayerEntities(pub HashMap<u32, Entity>);
+use voxel_net::{Server, configure_server};
 
 #[derive(Resource)]
 pub struct TokioRuntime(#[allow(dead_code)] pub Runtime);
@@ -48,11 +42,51 @@ pub struct NetworkPlugin;
 
 impl Plugin for NetworkPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<PlayerEntities>()
-            .init_resource::<ChunkLoadQueue>()
+        app.init_resource::<ChunkLoadQueue>()
             .init_resource::<ChunkUnloadQueue>()
             .init_resource::<ChunkEntities>()
             .add_systems(Startup, setup_connection)
-            .add_systems(Update, receive_updates.in_set(Systems::Network));
+            .add_systems(Update, dispatch_network_messages);
+    }
+}
+
+fn setup_connection(mut commands: Commands, settings: Res<Settings>) {
+    let addr = match &settings.server_addr {
+        Some(addr) => addr.parse().expect("Invalid server address"),
+        None => spawn_embedded_server().expect("Failed to start embedded server"),
+    };
+
+    let (connection, runtime) =
+        remote::connect(addr, settings.player_name.clone()).expect("Failed to connect");
+
+    commands.insert_resource(connection);
+    commands.insert_resource(TokioRuntime(runtime));
+}
+
+fn spawn_embedded_server() -> anyhow::Result<SocketAddr> {
+    let rt = tokio::runtime::Runtime::new()?;
+    let config = configure_server()?;
+    let mut server = rt.block_on(Server::bind("127.0.0.1:0".parse().unwrap(), config))?;
+    let addr = server.local_addr();
+
+    std::thread::spawn(move || {
+        rt.block_on(server.run()).unwrap();
+    });
+
+    Ok(addr)
+}
+
+fn dispatch_network_messages(mut commands: Commands, mut connection: ResMut<Connection>) {
+    while let Some(msg) = connection.try_recv() {
+        match msg {
+            ServerMessage::ConnectAck { id, name } => commands.trigger(Connected { id, name }),
+            ServerMessage::PlayerJoined { id, name } => commands.trigger(PlayerJoined { id, name }),
+            ServerMessage::PlayerLeft { id, name } => commands.trigger(PlayerLeft { id, name }),
+            ServerMessage::PositionUpdate { id, pos, look } => {
+                commands.trigger(PositionUpdate { id, pos, look })
+            }
+            ServerMessage::ChunkLoaded { pos, data } => commands.trigger(ChunkLoaded { pos, data }),
+            ServerMessage::ChunkUnloaded { pos } => commands.trigger(ChunkUnloaded { pos }),
+        }
     }
 }

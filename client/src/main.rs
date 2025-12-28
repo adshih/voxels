@@ -23,6 +23,7 @@ enum Systems {
     Movement,
     PostMovement,
     Network,
+    Chunk,
     Mesh,
 }
 
@@ -67,6 +68,7 @@ fn main() {
             Systems::Movement.after(Systems::Input),
             Systems::PostMovement.after(Systems::Movement),
             Systems::Network.after(Systems::PostMovement),
+            Systems::Chunk.after(Systems::Network),
             Systems::Mesh.after(Systems::Network),
         ),
     )

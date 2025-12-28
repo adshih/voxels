@@ -15,10 +15,12 @@ pub struct WorldPlugin;
 impl Plugin for WorldPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<ChunkEntities>()
+            .add_observer(on_chunk_loaded)
+            .add_observer(on_chunk_unloaded)
             .add_systems(Startup, load_assets)
             .add_systems(
                 Update,
-                (process_chunk_load_queue, process_chunk_unload_queue),
+                (process_chunk_load_queue, process_chunk_unload_queue).in_set(Systems::Chunk),
             )
             .add_systems(
                 Update,

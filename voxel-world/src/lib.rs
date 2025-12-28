@@ -1,5 +1,7 @@
-use glam::{IVec3, Vec3};
-use std::collections::HashMap;
+pub mod commands;
+pub mod events;
+pub mod player;
+mod terrain;
 
 use crate::{
     commands::WorldCommand,
@@ -9,11 +11,8 @@ use crate::{
         CHUNK_RENDER_DISTANCE, Terrain, chunk_in_range, chunks_in_radius, world_to_chunk_pos,
     },
 };
-
-pub mod commands;
-pub mod events;
-pub mod player;
-mod terrain;
+use glam::{IVec3, Vec3};
+use std::collections::HashMap;
 
 pub struct VoxelWorld {
     players: HashMap<u32, PlayerState>,
