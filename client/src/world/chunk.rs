@@ -1,12 +1,12 @@
 use crate::{
-    network::{
-        ChunkLoadQueue, ChunkUnloadQueue,
-        events::{ChunkLoaded, ChunkUnloaded},
-    },
+    network::events::{ChunkLoaded, ChunkUnloaded},
     world::{MAX_CHUNK_LOAD_PER_FRAME, NeedsMesh},
 };
 use bevy::prelude::*;
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::{HashMap, VecDeque},
+    sync::Arc,
+};
 use voxel_core::VoxelBuffer;
 
 #[derive(Component)]
@@ -14,6 +14,12 @@ pub struct ChunkData(pub Arc<VoxelBuffer>);
 
 #[derive(Default, Resource)]
 pub struct ChunkEntities(pub HashMap<IVec3, Entity>);
+
+#[derive(Resource, Default)]
+pub struct ChunkLoadQueue(pub VecDeque<(IVec3, Arc<VoxelBuffer>)>);
+
+#[derive(Resource, Default)]
+pub struct ChunkUnloadQueue(pub Vec<IVec3>);
 
 pub fn on_chunk_loaded(on: On<ChunkLoaded>, mut queue: ResMut<ChunkLoadQueue>) {
     let event = on.event();

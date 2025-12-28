@@ -1,9 +1,9 @@
 use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use bevy::prelude::*;
 
-use crate::network::ChunkLoadQueue;
 use crate::player::LocalPlayer;
 use crate::world::MAX_MESH_TASKS;
+use crate::world::chunk::ChunkLoadQueue;
 use crate::world::mesh::{MeshReady, MeshTask, NeedsMesh};
 
 #[derive(Component)]

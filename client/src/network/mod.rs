@@ -2,14 +2,12 @@ mod cert;
 pub mod events;
 mod remote;
 
+use crate::Settings;
 use crate::network::events::*;
-use crate::{Settings, world::chunk::ChunkEntities};
 use bevy::prelude::*;
-use std::sync::Arc;
-use std::{collections::VecDeque, net::SocketAddr};
+use std::net::SocketAddr;
 use tokio::runtime::Runtime;
 use tokio::sync::mpsc;
-use voxel_core::VoxelBuffer;
 use voxel_net::message::{ClientMessage, ServerMessage};
 use voxel_net::{Server, configure_server};
 
@@ -32,20 +30,11 @@ impl Connection {
     }
 }
 
-#[derive(Resource, Default)]
-pub struct ChunkLoadQueue(pub VecDeque<(IVec3, Arc<VoxelBuffer>)>);
-
-#[derive(Resource, Default)]
-pub struct ChunkUnloadQueue(pub Vec<IVec3>);
-
 pub struct NetworkPlugin;
 
 impl Plugin for NetworkPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<ChunkLoadQueue>()
-            .init_resource::<ChunkUnloadQueue>()
-            .init_resource::<ChunkEntities>()
-            .add_systems(Startup, setup_connection)
+        app.add_systems(Startup, setup_connection)
             .add_systems(Update, dispatch_network_messages);
     }
 }

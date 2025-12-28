@@ -15,6 +15,8 @@ pub struct WorldPlugin;
 impl Plugin for WorldPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<ChunkEntities>()
+            .init_resource::<ChunkLoadQueue>()
+            .init_resource::<ChunkUnloadQueue>()
             .add_observer(on_chunk_loaded)
             .add_observer(on_chunk_unloaded)
             .add_systems(Startup, load_assets)
