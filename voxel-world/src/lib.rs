@@ -1,12 +1,14 @@
 pub mod commands;
 pub mod events;
 pub mod player;
+mod storage;
 mod terrain;
 
 use crate::{
     commands::WorldCommand,
     events::WorldEvent,
     player::{PlayerInput, PlayerState},
+    storage::Storage,
     terrain::{
         CHUNK_RENDER_DISTANCE, Terrain, chunk_in_range, chunks_in_radius, world_to_chunk_pos,
     },
@@ -17,6 +19,7 @@ use std::collections::HashMap;
 pub struct VoxelWorld {
     players: HashMap<u32, PlayerState>,
     terrain: Terrain,
+    storage: Storage,
     events: Vec<WorldEvent>,
     next_id: u32,
 }
@@ -29,6 +32,7 @@ impl VoxelWorld {
         Self {
             players: HashMap::new(),
             terrain: Terrain::new(seed),
+            storage: Storage::new(),
             events: Vec::new(),
             next_id: 1,
         }
@@ -67,13 +71,17 @@ impl VoxelWorld {
 
     fn sync_player_chunks(&mut self) {
         for (&player_id, player_state) in &mut self.players.iter_mut() {
-            let chunk_pos = world_to_chunk_pos(player_state.pos);
+            let anchor = world_to_chunk_pos(player_state.pos);
 
             // prune distant chunks
             let events = &mut self.events;
             player_state.loaded_chunks.retain(|&pos| {
-                let keep = chunk_in_range(chunk_pos, pos, CHUNK_RENDER_DISTANCE);
+                let keep = chunk_in_range(anchor, pos, CHUNK_RENDER_DISTANCE);
                 if !keep {
+                    if let Some(buffer) = self.terrain.get(pos) {
+                        self.storage.save_chunk(pos, &buffer);
+                    }
+
                     events.push(WorldEvent::ChunkUnloaded {
                         for_player: player_id,
                         pos,
@@ -82,19 +90,25 @@ impl VoxelWorld {
                 keep
             });
 
-            if player_state.chunk_anchor != Some(chunk_pos) {
-                player_state.chunk_anchor = Some(chunk_pos);
+            if player_state.chunk_anchor != Some(anchor) {
+                player_state.chunk_anchor = Some(anchor);
 
-                let mut chunks: Vec<_> = chunks_in_radius(chunk_pos, CHUNK_RENDER_DISTANCE)
+                let mut chunks: Vec<_> = chunks_in_radius(anchor, CHUNK_RENDER_DISTANCE)
                     .into_iter()
                     .filter(|pos| !player_state.loaded_chunks.contains(pos))
                     .collect();
 
-                chunks.sort_by_key(|pos| pos.distance_squared(chunk_pos));
+                chunks.sort_by_key(|pos| pos.distance_squared(anchor));
 
                 for pos in chunks {
-                    if let Some(data) = self.terrain.get(pos) {
+                    if let Some(data) = self
+                        .storage
+                        .get_chunk(pos)
+                        .or_else(|| self.terrain.get(pos))
+                    {
                         player_state.loaded_chunks.insert(pos);
+                        self.terrain.set(pos, data.clone());
+
                         self.events.push(WorldEvent::ChunkLoaded {
                             for_player: player_id,
                             pos,

@@ -94,6 +94,10 @@ impl Terrain {
         }
     }
 
+    pub fn set(&mut self, pos: IVec3, buffer: Arc<VoxelBuffer>) {
+        self.chunks.insert(pos, buffer);
+    }
+
     pub fn get(&self, pos: IVec3) -> Option<Arc<VoxelBuffer>> {
         self.chunks.get(&pos).cloned()
     }

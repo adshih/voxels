@@ -5192,8 +5192,11 @@ dependencies = [
 name = "voxel-world"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
+ "flate2",
  "glam",
  "noise",
+ "postcard",
  "serde",
  "tokio",
  "voxel-core",
