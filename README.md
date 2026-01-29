@@ -1,5 +1,7 @@
 # Voxels
 
+A multiplayer voxel game built with Rust and Bevy.
+
 ## Prerequisites
 
 - [Install Rust](https://www.rust-lang.org/tools/install)
