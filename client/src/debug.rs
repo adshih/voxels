@@ -2,9 +2,6 @@ use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use bevy::prelude::*;
 
 use crate::player::LocalPlayer;
-use crate::world::MAX_MESH_TASKS;
-use crate::world::chunk::ChunkLoadQueue;
-use crate::world::mesh::{MeshReady, MeshTask, NeedsMesh};
 
 #[derive(Component)]
 struct DebugPanel;
@@ -18,9 +15,6 @@ struct PlayerText;
 #[derive(Component)]
 struct CameraText;
 
-#[derive(Component)]
-struct ChunkText;
-
 #[derive(Bundle)]
 struct DebugTextBundle {
     text: Text,
@@ -33,7 +27,7 @@ impl Default for DebugTextBundle {
         Self {
             text: Text::new(""),
             font: TextFont {
-                font_size: 14.0,
+                font_size: 18.0,
                 ..default()
             },
             color: TextColor(Color::WHITE),
@@ -57,13 +51,7 @@ impl Plugin for DebugPlugin {
         .add_systems(Startup, setup_debug_ui)
         .add_systems(
             Update,
-            (
-                debug_performance,
-                debug_player_position,
-                debug_camera_info,
-                debug_chunks,
-            )
-                .run_if(is_debug),
+            (debug_performance, debug_player_position, debug_camera_info).run_if(is_debug),
         )
         .add_systems(Update, toggle_debug);
     }
@@ -103,14 +91,12 @@ fn setup_debug_ui(mut commands: Commands) {
                 row_gap: Val::Px(1.0),
                 ..default()
             },
-            BackgroundColor(Color::BLACK.with_alpha(0.3)),
             DebugPanel,
         ))
         .with_children(|parent| {
             parent.spawn((DebugTextBundle::default(), PerformanceText));
             parent.spawn((DebugTextBundle::default(), PlayerText));
             parent.spawn((DebugTextBundle::default(), CameraText));
-            parent.spawn((DebugTextBundle::default(), ChunkText));
         });
 }
 
@@ -157,28 +143,5 @@ fn debug_camera_info(
         forward.z,
         rotation.1.to_degrees(), // pitch
         rotation.0.to_degrees()  // yaw
-    );
-}
-
-fn debug_chunks(
-    needs_mesh: Query<(), With<NeedsMesh>>,
-    mesh_tasks: Query<(), With<MeshTask>>,
-    mesh_ready: Query<(), With<MeshReady>>,
-    chunk_load_queue: Res<ChunkLoadQueue>,
-    mut text: Single<&mut Text, With<ChunkText>>,
-) {
-    text.0 = format!(
-        r#"
-Chunks:
-    ChunkLoadQueue: {},
-    NeedsMesh: {},
-    MeshTask: {}/{}
-    MeshReady: {}
-        "#,
-        chunk_load_queue.0.len(),
-        needs_mesh.iter().count(),
-        mesh_tasks.iter().count(),
-        MAX_MESH_TASKS,
-        mesh_ready.iter().count(),
     );
 }
