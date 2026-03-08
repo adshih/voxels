@@ -5286,10 +5286,10 @@ dependencies = [
 name = "voxel-world"
 version = "0.1.0"
 dependencies = [
+ "crossbeam-channel",
  "glam",
  "noise",
  "serde",
- "tokio",
  "voxel-core",
 ]
 

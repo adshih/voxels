@@ -6,7 +6,6 @@ use std::{
 
 use glam::{IVec3, UVec3, Vec3};
 use noise::{core::perlin::perlin_2d, permutationtable::PermutationTable};
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use voxel_core::{Voxel, VoxelBuffer};
 
 pub const CHUNK_SIZE: UVec3 = UVec3::splat(16);
@@ -68,19 +67,19 @@ impl TerrainGenerator {
 pub struct Terrain {
     chunks: HashMap<IVec3, Arc<VoxelBuffer>>,
     pending: HashSet<IVec3>,
-    request_tx: UnboundedSender<IVec3>,
-    result_rx: UnboundedReceiver<(IVec3, Arc<VoxelBuffer>)>,
+    request_tx: crossbeam_channel::Sender<IVec3>,
+    result_rx: crossbeam_channel::Receiver<(IVec3, Arc<VoxelBuffer>)>,
 }
 
 impl Terrain {
     pub fn new(seed: u32) -> Self {
-        let (request_tx, mut request_rx) = unbounded_channel();
-        let (result_tx, result_rx) = unbounded_channel();
+        let (request_tx, request_rx) = crossbeam_channel::unbounded();
+        let (result_tx, result_rx) = crossbeam_channel::unbounded();
 
         std::thread::spawn(move || {
             let generator = TerrainGenerator::new(seed);
 
-            while let Some(pos) = request_rx.blocking_recv() {
+            while let Ok(pos) = request_rx.recv() {
                 let data = Arc::new(generator.generate(pos));
                 let _ = result_tx.send((pos, data));
             }
