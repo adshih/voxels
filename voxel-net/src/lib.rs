@@ -1,35 +1,22 @@
 pub mod message;
 
-use quinn::rustls::pki_types::PrivatePkcs8KeyDer;
-use quinn::{Connection, Endpoint, ServerConfig};
-use std::collections::HashMap;
-use std::net::SocketAddr;
-use std::sync::Arc;
-use std::time::Duration;
-use tokio::sync::RwLock;
-use tokio::time::interval;
-use voxel_world::VoxelWorld;
+use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 
-use message::{ClientMessage, ServerMessage, WireMessage};
-use voxel_world::commands::WorldCommand;
-use voxel_world::events::WorldEvent;
+use quinn::{Connection as QuicConnection, Endpoint, ServerConfig};
+use tokio::sync::{RwLock, mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel}};
+use voxel_world::{
+    VoxelWorld, command::WorldCommand, envelope::Envelope, event::WorldEvent,
+    request::{Call, Connect, Ping, WorldRequest},
+};
 
-const TICK_RATE: f32 = 60.0;
-const DT: f32 = 1.0 / TICK_RATE;
+use crate::message::{ClientCommand, ClientRequest, deserialize, serialize};
 
-struct ClientInfo {
-    conn: Connection,
-    name: String,
-}
-
-struct ServerState {
-    world: VoxelWorld,
-    clients: HashMap<u32, ClientInfo>,
-}
+const MAX_MSG_SIZE: usize = 1024 * 1024; // 1mb
 
 pub struct Server {
+    world: VoxelWorld,
     endpoint: Endpoint,
-    state: Arc<RwLock<ServerState>>,
+    clients: Arc<RwLock<HashMap<u32, UnboundedSender<WorldEvent>>>>,
 }
 
 impl Server {
@@ -39,245 +26,173 @@ impl Server {
 
         Ok(Self {
             endpoint,
-            state: Arc::new(RwLock::new(ServerState {
-                world: VoxelWorld::new(123),
-                clients: HashMap::new(),
-            })),
+            world: VoxelWorld::new(123),
+            clients: Arc::new(RwLock::new(HashMap::new())),
         })
     }
 
-    pub fn local_addr(&self) -> SocketAddr {
-        self.endpoint.local_addr().unwrap()
-    }
+    pub async fn run(self) -> anyhow::Result<()> {
+        let Server {
+            world,
+            endpoint,
+            clients,
+        } = self;
 
-    pub async fn run(&mut self) -> anyhow::Result<()> {
-        let state = self.state.clone();
+        let (cmd_tx, cmd_rx) = unbounded_channel();
+        let (req_tx, req_rx) = unbounded_channel();
+        let (event_tx, event_rx) = unbounded_channel();
 
-        tokio::spawn(async move {
-            let mut interval = interval(Duration::from_secs_f32(DT));
+        std::thread::spawn(move || world.run(cmd_rx, req_rx, event_tx));
 
-            loop {
-                interval.tick().await;
-
-                let events = {
-                    let mut state = state.write().await;
-                    state.world.tick(DT)
-                };
-
-                for event in events {
-                    handle_event(&state, event).await;
-                }
-            }
-        });
-
-        while let Some(conn) = self.endpoint.accept().await {
-            let state = self.state.clone();
-            tokio::spawn(async move {
-                if let Ok(connection) = conn.await {
-                    handle_player(connection, state).await;
-                }
-            });
+        tokio::select! {
+            _ = dispatch(event_rx, clients.clone()) => (),
+            _ = accept_connections(endpoint, cmd_tx, req_tx, clients) => ()
         }
 
         Ok(())
     }
 }
 
-async fn handle_player(conn: Connection, state: Arc<RwLock<ServerState>>) {
-    let mut client_id: Option<u32> = None;
+async fn dispatch(
+    mut event_rx: UnboundedReceiver<Envelope<WorldEvent>>,
+    clients: Arc<RwLock<HashMap<u32, UnboundedSender<WorldEvent>>>>,
+) {
+    while let Some(envelope) = event_rx.recv().await {
+        let clients = clients.read().await;
 
+        match &envelope.to {
+            None => {
+                for tx in clients.values() {
+                    let _ = tx.send(envelope.payload.clone());
+                }
+            }
+            Some(id) => {
+                if let Some(tx) = clients.get(id) {
+                    let _ = tx.send(envelope.payload);
+                }
+            }
+        }
+    }
+}
+
+async fn accept_connections(
+    endpoint: Endpoint,
+    cmd_tx: UnboundedSender<Envelope<WorldCommand>>,
+    req_tx: UnboundedSender<WorldRequest>,
+    clients: Arc<RwLock<HashMap<u32, UnboundedSender<WorldEvent>>>>,
+) {
+    while let Some(incoming) = endpoint.accept().await {
+        let cmd_tx = cmd_tx.clone();
+        let req_tx = req_tx.clone();
+        let clients = clients.clone();
+
+        tokio::spawn(async move {
+            if let Ok(connection) = incoming.await {
+                if let Err(e) = session(connection, cmd_tx, req_tx, clients).await {
+                    eprintln!("session error: {e}");
+                }
+            }
+        });
+    }
+}
+
+async fn session(
+    connection: QuicConnection,
+    cmd_tx: UnboundedSender<Envelope<WorldCommand>>,
+    req_tx: UnboundedSender<WorldRequest>,
+    clients: Arc<RwLock<HashMap<u32, UnboundedSender<WorldEvent>>>>,
+) -> anyhow::Result<()> {
+    let (id, name) = handshake(&connection, &req_tx).await?;
+    println!("{name}[{id}] joined");
+
+    let (event_tx, event_rx) = tokio::sync::mpsc::unbounded_channel();
+    clients.write().await.insert(id, event_tx);
+
+    tokio::select! {
+        _ = receive_commands(connection.clone(), cmd_tx.clone(), id) => (),
+        _ = handle_requests(connection.clone(), req_tx.clone()) => (),
+        _ = send_events(connection.clone(), event_rx) => ()
+    }
+
+    cmd_tx.send(Envelope::from(id, WorldCommand::Disconnect))?;
+    clients.write().await.remove(&id);
+    connection.close(0u32.into(), b"goodbye");
+
+    println!("{name}[{id}] left");
+
+    Ok(())
+}
+
+async fn handshake(
+    connection: &QuicConnection,
+    req_tx: &UnboundedSender<WorldRequest>,
+) -> anyhow::Result<(u32, String)> {
+    let (mut send, mut recv) = connection.accept_bi().await?;
+    let bytes = recv.read_to_end(MAX_MSG_SIZE).await?;
+    let connect: Connect = deserialize(&bytes)?;
+
+    let (call, rx) = Call::new(connect.clone());
+    req_tx.send(WorldRequest::Connect(call))?;
+    let id = rx.await?;
+
+    send.write_all(&serialize(&id)).await?;
+    send.finish()?;
+
+    Ok((id, connect.name))
+}
+
+async fn receive_commands(
+    connection: QuicConnection,
+    cmd_tx: UnboundedSender<Envelope<WorldCommand>>,
+    id: u32,
+) -> anyhow::Result<()> {
     loop {
-        tokio::select! {
-            result = conn.read_datagram() => {
-                let Ok(data) = result else { break };
-                if let Ok(msg) = ClientMessage::deserialize(&data)
-                    && let Some(id) = client_id
-                {
-                    handle_message(msg, id, &state).await;
-                }
+        let data = connection.read_datagram().await?;
+        let cmd: ClientCommand = deserialize(&data)?;
+        cmd_tx.send(Envelope::from(id, cmd))?;
+    }
+}
+
+async fn handle_requests(
+    connection: QuicConnection,
+    req_tx: UnboundedSender<WorldRequest>,
+) -> anyhow::Result<()> {
+    loop {
+        let (mut send, mut recv) = connection.accept_bi().await?;
+        let bytes = recv.read_to_end(MAX_MSG_SIZE).await?;
+        let req: ClientRequest = deserialize(&bytes)?;
+
+        match req {
+            ClientRequest::Ping => {
+                let (call, rx) = Call::new(Ping);
+                req_tx.send(WorldRequest::Ping(call))?;
+                let pong = rx.await?;
+
+                send.write_all(&serialize(&pong)).await?;
+                send.finish()?;
             }
-
-            result = conn.accept_bi() => {
-                let Ok((mut send, mut recv)) = result else { break };
-                let mut buf = vec![0u8; 1024];
-
-                if let Ok(Some(n)) = recv.read(&mut buf).await
-                    && let Ok(msg) = ClientMessage::deserialize(&buf[..n])
-                {
-                    match &msg {
-                        ClientMessage::Connect { name } => {
-                           let id = register_player(&state).await;
-                           client_id = Some(id);
-
-                           send_connect_ack(id, name.clone(), &mut send).await;
-                           send_existing_players(&conn, &state).await;
-
-                           insert_client(id, conn.clone(), name, &state).await;
-                           broadcast_player_joined(id, name, &state).await;
-                        }
-                        _ => {
-                            if let Some(id) = client_id {
-                                handle_message(msg, id, &state).await;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    if let Some(id) = client_id {
-        remove_client(id, &state).await;
-    }
-}
-
-async fn register_player(state: &Arc<RwLock<ServerState>>) -> u32 {
-    let mut state = state.write().await;
-    let id = state.world.add_player();
-    println!("Player (id: {}) connected", id);
-    id
-}
-
-async fn send_connect_ack(id: u32, name: String, send: &mut quinn::SendStream) {
-    let msg = ServerMessage::ConnectAck { id, name };
-    if let Ok(bytes) = msg.serialize() {
-        let _ = send.write_all(&bytes).await;
-        let _ = send.finish();
-    }
-}
-
-async fn send_existing_players(conn: &Connection, state: &Arc<RwLock<ServerState>>) {
-    let state = state.read().await;
-
-    for (&id, client) in &state.clients {
-        send_reliable(
-            conn,
-            &ServerMessage::PlayerJoined {
-                id,
-                name: client.name.clone(),
-            },
-        )
-        .await;
-    }
-}
-
-async fn broadcast_player_joined(id: u32, name: &str, state: &Arc<RwLock<ServerState>>) {
-    let state = state.read().await;
-
-    for (&other_id, client) in &state.clients {
-        if other_id != id {
-            send_reliable(
-                &client.conn,
-                &ServerMessage::PlayerJoined {
-                    id,
-                    name: name.to_string(),
-                },
-            )
-            .await;
+            _ => {}
         }
     }
 }
 
-async fn insert_client(id: u32, conn: Connection, name: &str, state: &Arc<RwLock<ServerState>>) {
-    let mut state = state.write().await;
-    state.clients.insert(
-        id,
-        ClientInfo {
-            conn,
-            name: name.to_string(),
-        },
-    );
-}
-
-async fn handle_message(msg: ClientMessage, id: u32, state: &Arc<RwLock<ServerState>>) {
-    #[allow(clippy::single_match)]
-    match msg {
-        ClientMessage::Input { input } => {
-            let mut state = state.write().await;
-            state.world.execute(WorldCommand::PlayerMove { id, input });
-        }
-        _ => {}
-    }
-}
-
-async fn remove_client(id: u32, state: &Arc<RwLock<ServerState>>) {
-    let mut state = state.write().await;
-    let Some(client) = state.clients.remove(&id) else {
-        return;
-    };
-
-    println!("{} (id: {}) disconnected", client.name, id);
-
-    let msg = ServerMessage::PlayerLeft {
-        id,
-        name: client.name,
-    };
-    for client in state.clients.values() {
-        send_reliable(&client.conn, &msg).await;
-    }
-}
-
-async fn handle_event(state: &Arc<RwLock<ServerState>>, event: WorldEvent) {
-    match event {
-        WorldEvent::PlayerMoved { id, pos, look } => {
-            let state = state.read().await;
-            let msg = ServerMessage::PositionUpdate { id, pos, look };
-
-            let bytes = msg.serialize().unwrap();
-
-            for client in state.clients.values() {
-                let _ = client.conn.send_datagram(bytes.clone().into());
+async fn send_events(
+    connection: QuicConnection,
+    mut evt_rx: tokio::sync::mpsc::UnboundedReceiver<WorldEvent>,
+) -> anyhow::Result<()> {
+    while let Some(event) = evt_rx.recv().await {
+        match &event {
+            WorldEvent::PlayerMoved { .. } => {
+                let bytes = serialize(&event);
+                connection.send_datagram(bytes.into())?;
             }
-        }
-        WorldEvent::ChunkLoaded {
-            for_player,
-            pos,
-            data,
-        } => {
-            if data.is_all_empty() {
-                return;
-            }
-
-            let conn = {
-                let state = state.read().await;
-                state.clients.get(&for_player).map(|c| c.conn.clone())
-            };
-
-            if let Some(conn) = conn {
-                tokio::spawn(async move {
-                    let msg = ServerMessage::ChunkLoaded { pos, data };
-                    send_reliable(&conn, &msg).await;
-                });
-            }
-        }
-        WorldEvent::ChunkUnloaded { for_player, pos } => {
-            let conn = {
-                let state = state.read().await;
-                state.clients.get(&for_player).map(|c| c.conn.clone())
-            };
-
-            if let Some(conn) = conn {
-                let msg = ServerMessage::ChunkUnloaded { pos };
-                send_reliable(&conn, &msg).await;
+            _ => {
+                let bytes = serialize(&event);
+                let mut send = connection.open_uni().await?;
+                send.write_all(&bytes).await?;
+                send.finish()?;
             }
         }
     }
-}
-
-async fn send_reliable(conn: &Connection, msg: &ServerMessage) {
-    if let Ok(mut send) = conn.open_uni().await
-        && let Ok(bytes) = msg.serialize()
-    {
-        let _ = send.write_all(&bytes).await;
-        let _ = send.finish();
-    }
-}
-
-pub fn configure_server() -> anyhow::Result<ServerConfig> {
-    let cert = rcgen::generate_simple_self_signed(vec!["localhost".to_string()])?;
-    let key = PrivatePkcs8KeyDer::from(cert.signing_key.serialize_der());
-    Ok(ServerConfig::with_single_cert(
-        vec![cert.cert.into()],
-        key.into(),
-    )?)
+    Ok(())
 }

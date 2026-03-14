@@ -1,13 +1,11 @@
 use std::sync::Arc;
 
 use quinn::rustls::{
-    self, DigitallySignedStruct, SignatureScheme,
-    client::danger,
+    self, DigitallySignedStruct, SignatureScheme, client::danger,
     crypto::{CryptoProvider, verify_tls12_signature, verify_tls13_signature},
     pki_types::{CertificateDer, ServerName, UnixTime},
 };
 
-// Implementation of `ServerCertVerifier` that verifies everything as trustworthy.
 #[derive(Debug)]
 pub struct SkipServerVerification(Arc<CryptoProvider>);
 
@@ -28,6 +26,7 @@ impl danger::ServerCertVerifier for SkipServerVerification {
     ) -> Result<danger::ServerCertVerified, rustls::Error> {
         Ok(danger::ServerCertVerified::assertion())
     }
+
     fn verify_tls12_signature(
         &self,
         message: &[u8],

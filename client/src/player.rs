@@ -1,19 +1,14 @@
-use crate::{
-    Systems,
-    network::{
-        Connection,
-        events::{Connected, PlayerJoined, PlayerLeft, PositionUpdate},
-    },
-};
-use bevy::prelude::*;
 use std::collections::HashMap;
-use voxel_net::message::ClientMessage;
-use voxel_world::player::PlayerInput;
+
+use bevy::prelude::*;
+use voxel_world::{command::MovePlayer, event::*, player::PlayerInput};
+
+use crate::{Systems, connection::bridge::{FromWorld, WorldBridge}};
 
 #[allow(dead_code)]
 #[derive(Component)]
 pub struct LocalPlayer {
-    pub id: Option<u32>,
+    pub id: u32,
     pub name: String,
     pub input: PlayerInput,
 }
@@ -21,6 +16,12 @@ pub struct LocalPlayer {
 #[allow(dead_code)]
 #[derive(Component)]
 pub struct RemotePlayer {
+    pub id: u32,
+    pub name: String,
+}
+
+#[derive(Event)]
+pub struct Connected {
     pub id: u32,
     pub name: String,
 }
@@ -33,10 +34,10 @@ pub struct PlayerPlugin;
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<PlayerEntities>()
-            .add_observer(on_connected)
             .add_observer(on_player_joined)
             .add_observer(on_player_left)
             .add_observer(on_position_update)
+            .add_observer(on_connected)
             .add_systems(
                 Update,
                 (read_input, send_input)
@@ -53,10 +54,9 @@ fn has_local_player(player: Option<Single<&LocalPlayer>>) -> bool {
 
 fn on_connected(on: On<Connected>, mut commands: Commands) {
     let event = on.event();
-
     commands.spawn((
         LocalPlayer {
-            id: Some(event.id),
+            id: event.id,
             name: event.name.clone(),
             input: PlayerInput::default(),
         },
@@ -65,7 +65,7 @@ fn on_connected(on: On<Connected>, mut commands: Commands) {
 }
 
 fn on_player_joined(
-    on: On<PlayerJoined>,
+    on: On<FromWorld<PlayerJoined>>,
     local_player: Single<&LocalPlayer>,
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -73,13 +73,12 @@ fn on_player_joined(
     mut players: ResMut<PlayerEntities>,
 ) {
     let event = on.event();
-    if let Some(id) = local_player.id
-        && id == event.id
-    {
-        return;
-    }
 
     println!("{} joined", event.name);
+
+    if local_player.id == event.id {
+        return;
+    }
 
     let entity = commands
         .spawn((
@@ -97,7 +96,11 @@ fn on_player_joined(
     players.0.insert(event.id, entity);
 }
 
-fn on_player_left(on: On<PlayerLeft>, mut commands: Commands, mut players: ResMut<PlayerEntities>) {
+fn on_player_left(
+    on: On<FromWorld<PlayerLeft>>,
+    mut commands: Commands,
+    mut players: ResMut<PlayerEntities>,
+) {
     let event = on.event();
     println!("{} left", event.name);
 
@@ -107,7 +110,7 @@ fn on_player_left(on: On<PlayerLeft>, mut commands: Commands, mut players: ResMu
 }
 
 fn on_position_update(
-    on: On<PositionUpdate>,
+    on: On<FromWorld<PlayerMoved>>,
     mut commands: Commands,
     player: Single<(&LocalPlayer, &mut Transform)>,
     player_entities: ResMut<PlayerEntities>,
@@ -115,9 +118,7 @@ fn on_position_update(
     let (local_player, mut transform) = player.into_inner();
     let event = on.event();
 
-    if let Some(id) = local_player.id
-        && id == event.id
-    {
+    if local_player.id == event.id {
         transform.translation = event.pos;
         return;
     }
@@ -156,8 +157,8 @@ fn read_input(keyboard: Res<ButtonInput<KeyCode>>, mut local_player: Single<&mut
     local_player.input.sprint = sprint;
 }
 
-pub fn send_input(connection: Res<Connection>, local_player: Single<&LocalPlayer>) {
-    connection.send(ClientMessage::Input {
+pub fn send_input(world: Res<WorldBridge>, local_player: Single<&LocalPlayer>) {
+    world.send(MovePlayer {
         input: local_player.input.clone(),
     });
 }

@@ -1,9 +1,10 @@
+use std::sync::Arc;
+
 use bevy::{
     asset::RenderAssetUsages,
     mesh::{Indices, PrimitiveTopology},
     prelude::*,
 };
-use std::sync::Arc;
 use voxel_core::{Voxel, VoxelBuffer};
 
 const ATLAS_SIZE: f32 = 16.0;

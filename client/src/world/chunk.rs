@@ -1,13 +1,13 @@
-use crate::{
-    network::events::{ChunkLoaded, ChunkUnloaded},
-    world::{MAX_CHUNK_LOAD_PER_FRAME, NeedsMesh},
-};
-use bevy::prelude::*;
 use std::{
     collections::{HashMap, VecDeque},
     sync::Arc,
 };
+
+use bevy::prelude::*;
 use voxel_core::VoxelBuffer;
+use voxel_world::event::*;
+
+use crate::{connection::bridge::FromWorld, world::{MAX_CHUNK_LOAD_PER_FRAME, NeedsMesh}};
 
 #[derive(Component)]
 pub struct ChunkData(pub Arc<VoxelBuffer>);
@@ -21,13 +21,13 @@ pub struct ChunkLoadQueue(pub VecDeque<(IVec3, Arc<VoxelBuffer>)>);
 #[derive(Resource, Default)]
 pub struct ChunkUnloadQueue(pub Vec<IVec3>);
 
-pub fn on_chunk_loaded(on: On<ChunkLoaded>, mut queue: ResMut<ChunkLoadQueue>) {
+pub fn on_chunk_loaded(on: On<FromWorld<ChunkLoaded>>, mut queue: ResMut<ChunkLoadQueue>) {
     let event = on.event();
     queue.0.push_back((event.pos, event.data.clone()));
 }
 
 pub fn on_chunk_unloaded(
-    on: On<ChunkUnloaded>,
+    on: On<FromWorld<ChunkUnloaded>>,
     mut load_queue: ResMut<ChunkLoadQueue>,
     mut unload_queue: ResMut<ChunkUnloadQueue>,
 ) {

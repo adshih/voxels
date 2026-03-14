@@ -1,8 +1,6 @@
-use bevy::input::mouse::MouseMotion;
-use bevy::prelude::*;
+use bevy::{input::mouse::MouseMotion, prelude::*};
 
-use crate::Systems;
-use crate::player::LocalPlayer;
+use crate::{Systems, player::LocalPlayer};
 
 pub struct CameraPlugin;
 

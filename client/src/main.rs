@@ -1,21 +1,22 @@
 mod camera;
+mod connection;
 mod debug;
-mod network;
 mod player;
 mod world;
 
-use std::env;
-use std::f32::consts::PI;
+use std::{env, f32::consts::PI};
+
+use bevy::{
+    asset::AssetMetaCheck,
+    prelude::*,
+    window::{CursorGrabMode, CursorOptions, PrimaryWindow},
+};
 
 use camera::CameraPlugin;
+use connection::NetworkPlugin;
 use debug::DebugPlugin;
-use network::NetworkPlugin;
 use player::PlayerPlugin;
 use world::WorldPlugin;
-
-use bevy::asset::AssetMetaCheck;
-use bevy::prelude::*;
-use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow};
 
 #[derive(SystemSet, Debug, Clone, Hash, Eq, PartialEq)]
 enum Systems {
@@ -29,31 +30,28 @@ enum Systems {
 
 #[derive(Default, Debug, Resource)]
 pub struct Settings {
-    server_addr: Option<String>,
-    player_name: String,
+    addr: Option<String>,
+    name: String,
 }
 
 impl Settings {
     pub fn from_args() -> Self {
         let args: Vec<String> = env::args().collect();
 
-        let server_addr = args
+        let addr = args
             .iter()
             .position(|a| a == "--connect" || a == "-c")
             .and_then(|i| args.get(i + 1))
             .cloned();
 
-        let player_name = args
+        let name = args
             .iter()
             .position(|a| a == "--name" || a == "-n")
             .and_then(|i| args.get(i + 1))
             .cloned()
             .unwrap_or_else(|| "Player".to_string());
 
-        Self {
-            server_addr,
-            player_name,
-        }
+        Self { addr, name }
     }
 }
 

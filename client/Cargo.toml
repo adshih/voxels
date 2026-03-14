@@ -9,6 +9,8 @@ bevy = "0.18"
 noise = "0.9.0"
 quinn = "0.11.9"
 voxel-net = { version = "0.1.0", path = "../voxel-net" }
-tokio = { version = "1.48.0", features = ["full"] }
+tokio = { version = "1.48.0", features = ["sync", "rt", "rt-multi-thread"] }
 voxel-core = { version = "0.1.0", path = "../voxel-core" }
 voxel-world = { version = "0.1.0", path = "../voxel-world" }
+oneshot = { version = "0.2.1", features = ["std"] }
+crossbeam-channel = "0.5.15"

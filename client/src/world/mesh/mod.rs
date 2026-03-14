@@ -1,10 +1,11 @@
 mod generate;
 
-use crate::world::{ChunkData, MAX_MESH_TASKS, mesh::generate::generate_mesh};
 use bevy::{
     prelude::*,
     tasks::{AsyncComputeTaskPool, Task, block_on, poll_once},
 };
+
+use crate::world::{ChunkData, MAX_MESH_TASKS, mesh::generate::generate_mesh};
 
 #[derive(Component)]
 pub struct NeedsMesh;

@@ -1,11 +1,9 @@
 pub mod chunk;
 pub mod mesh;
 
-use crate::{
-    Systems,
-    world::{chunk::*, mesh::*},
-};
 use bevy::prelude::*;
+
+use crate::{Systems, world::{chunk::*, mesh::*}};
 
 pub const MAX_CHUNK_LOAD_PER_FRAME: usize = 20;
 pub const MAX_MESH_TASKS: usize = 100;
