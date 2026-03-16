@@ -3,10 +3,15 @@ use std::{
     sync::{Arc, OnceLock},
 };
 
-use quinn::{ClientConfig, Connection as QuicConnection, Endpoint, crypto::rustls::QuicClientConfig};
-use tokio::{runtime::Runtime, sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel}};
+use quinn::{
+    ClientConfig, Connection as QuicConnection, Endpoint, crypto::rustls::QuicClientConfig,
+};
+use tokio::{
+    runtime::Runtime,
+    sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel},
+};
 use voxel_net::message::{ClientCommand, ClientRequest, deserialize, serialize};
-use voxel_world::{Bridge, command::WorldCommand, event::WorldEvent, request::{Connect, WorldRequest}};
+use voxel_world::{Bridge, command::WorldCommand, event::WorldEvent, request::WorldRequest};
 
 use crate::connection::cert::SkipServerVerification;
 
@@ -19,14 +24,12 @@ pub fn connect(addr: String, name: String) -> anyhow::Result<(u32, Bridge)> {
     let addr: SocketAddr = addr.parse()?;
     let rt = RT.get_or_init(|| Runtime::new().unwrap());
 
-    let (id, bridge) = rt.block_on(async {
+    let bridge = rt.block_on(async {
         let config = configure_client()?;
         let mut endpoint = Endpoint::client("0.0.0.0:0".parse().unwrap())?;
         endpoint.set_default_client_config(config);
 
         let conn = endpoint.connect(addr, SERVER_NAME)?.await?;
-
-        let id = handshake(&conn, &name).await?;
 
         let (cmd_tx, cmd_rx) = unbounded_channel();
         let (req_tx, req_rx) = unbounded_channel();
@@ -35,8 +38,10 @@ pub fn connect(addr: String, name: String) -> anyhow::Result<(u32, Bridge)> {
         tokio::spawn(network_task(conn, cmd_rx, req_rx, event_tx));
 
         let bridge = Bridge::new(cmd_tx, req_tx, event_rx);
-        Ok::<_, anyhow::Error>((id, bridge))
+        Ok::<_, anyhow::Error>(bridge)
     })?;
+
+    let id = bridge.connect(name)?;
 
     Ok((id, bridge))
 }
@@ -52,19 +57,6 @@ fn configure_client() -> anyhow::Result<ClientConfig> {
     )?)))
 }
 
-async fn handshake(conn: &QuicConnection, name: &str) -> anyhow::Result<u32> {
-    let (mut send, mut recv) = conn.open_bi().await?;
-    let connect = Connect {
-        name: name.to_string(),
-    };
-    send.write_all(&serialize(&connect)).await?;
-    send.finish()?;
-
-    let bytes = recv.read_to_end(MAX_MSG_SIZE).await?;
-    let id: u32 = deserialize(&bytes)?;
-    Ok(id)
-}
-
 async fn network_task(
     conn: QuicConnection,
     mut cmd_rx: UnboundedReceiver<WorldCommand>,
@@ -74,7 +66,7 @@ async fn network_task(
     tokio::select! {
         _ = receive_events(conn.clone(), event_tx) => (),
         _ = send_commands(conn.clone(), &mut cmd_rx) => (),
-        _ = handle_requests(conn.clone(), &mut req_rx) => (),
+        _ = relay_requests(conn.clone(), &mut req_rx) => (),
     }
 }
 
@@ -108,23 +100,31 @@ async fn receive_events(
                 let mut recv = result?;
                 let tx = event_tx.clone();
                 tokio::spawn(async move {
-                    if let Ok(data) = recv.read_to_end(MAX_MSG_SIZE).await {
-                        if let Ok(event) = deserialize::<WorldEvent>(&data) {
+                    if let Ok(data) = recv.read_to_end(MAX_MSG_SIZE).await
+                        && let Ok(event) = deserialize::<WorldEvent>(&data) {
                             let _ = tx.send(event);
                         }
-                    }
                 });
             }
         }
     }
 }
 
-async fn handle_requests(
+async fn relay_requests(
     conn: QuicConnection,
     req_rx: &mut UnboundedReceiver<WorldRequest>,
 ) -> anyhow::Result<()> {
     while let Some(req) = req_rx.recv().await {
         match req {
+            WorldRequest::Connect(call) => {
+                let (mut send, mut recv) = conn.open_bi().await?;
+                send.write_all(&serialize(&call.payload)).await?;
+                send.finish()?;
+
+                let bytes = recv.read_to_end(MAX_MSG_SIZE).await?;
+                let id: u32 = deserialize(&bytes)?;
+                call.reply(id);
+            }
             WorldRequest::Ping(call) => {
                 let (mut send, mut recv) = conn.open_bi().await?;
                 send.write_all(&serialize(&ClientRequest::Ping)).await?;
@@ -134,7 +134,6 @@ async fn handle_requests(
                 let pong = deserialize(&bytes)?;
                 call.reply(pong);
             }
-            _ => {}
         }
     }
     Ok(())

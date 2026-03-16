@@ -3,9 +3,15 @@ pub mod message;
 use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 
 use quinn::{Connection as QuicConnection, Endpoint, ServerConfig};
-use tokio::sync::{RwLock, mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel}};
+use tokio::sync::{
+    RwLock,
+    mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel},
+};
 use voxel_world::{
-    VoxelWorld, command::WorldCommand, envelope::Envelope, event::WorldEvent,
+    VoxelWorld,
+    command::WorldCommand,
+    envelope::Envelope,
+    event::WorldEvent,
     request::{Call, Connect, Ping, WorldRequest},
 };
 
@@ -87,10 +93,10 @@ async fn accept_connections(
         let clients = clients.clone();
 
         tokio::spawn(async move {
-            if let Ok(connection) = incoming.await {
-                if let Err(e) = session(connection, cmd_tx, req_tx, clients).await {
-                    eprintln!("session error: {e}");
-                }
+            if let Ok(connection) = incoming.await
+                && let Err(e) = session(connection, cmd_tx, req_tx, clients).await
+            {
+                eprintln!("session error: {e}");
             }
         });
     }
@@ -162,6 +168,7 @@ async fn handle_requests(
         let bytes = recv.read_to_end(MAX_MSG_SIZE).await?;
         let req: ClientRequest = deserialize(&bytes)?;
 
+        #[allow(clippy::single_match)]
         match req {
             ClientRequest::Ping => {
                 let (call, rx) = Call::new(Ping);
