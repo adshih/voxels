@@ -4,7 +4,7 @@ use voxel_net::Server;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let addr = "127.0.0.1:8080".parse()?;
+    let addr = "0.0.0.0:8080".parse()?;
     let config = configure_server()?;
 
     let server = Server::bind(addr, config).await?;
