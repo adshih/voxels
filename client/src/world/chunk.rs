@@ -7,7 +7,7 @@ use bevy::prelude::*;
 use voxel_core::VoxelBuffer;
 use voxel_world::event::*;
 
-use crate::{connection::bridge::FromWorld, world::{MAX_CHUNK_LOAD_PER_FRAME, NeedsMesh}};
+use crate::{connection::bridge::FromWorld, world::{MAX_CHUNK_LOAD_PER_FRAME, MAX_CHUNK_UNLOAD_PER_FRAME, NeedsMesh}};
 
 #[derive(Component)]
 pub struct ChunkData(pub Arc<VoxelBuffer>);
@@ -23,6 +23,9 @@ pub struct ChunkUnloadQueue(pub Vec<IVec3>);
 
 pub fn on_chunk_loaded(on: On<FromWorld<ChunkLoaded>>, mut queue: ResMut<ChunkLoadQueue>) {
     let event = on.event();
+    if event.data.is_all_empty() {
+        return;
+    }
     queue.0.push_back((event.pos, event.data.clone()));
 }
 
@@ -65,7 +68,10 @@ pub fn process_chunk_unload_queue(
     mut chunk_unload_queue: ResMut<ChunkUnloadQueue>,
     mut chunk_entities: ResMut<ChunkEntities>,
 ) {
-    for pos in chunk_unload_queue.0.drain(..) {
+    for _ in 0..MAX_CHUNK_UNLOAD_PER_FRAME {
+        let Some(pos) = chunk_unload_queue.0.pop() else {
+            break;
+        };
         if let Some(entity) = chunk_entities.0.remove(&pos) {
             commands.entity(entity).despawn();
         }

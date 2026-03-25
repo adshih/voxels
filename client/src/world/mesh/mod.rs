@@ -5,7 +5,7 @@ use bevy::{
     tasks::{AsyncComputeTaskPool, Task, block_on, poll_once},
 };
 
-use crate::world::{ChunkData, MAX_MESH_TASKS, mesh::generate::generate_mesh};
+use crate::world::{ChunkData, MAX_MESH_TASKS, MAX_MESH_UPLOADS_PER_FRAME, mesh::generate::generate_mesh};
 
 #[derive(Component)]
 pub struct NeedsMesh;
@@ -73,7 +73,7 @@ pub fn upload_meshes(
     mut meshes: ResMut<Assets<Mesh>>,
     block_material: Res<BlockMaterial>,
 ) {
-    for (entity, mut mesh_ready) in ready.iter_mut().take(MAX_MESH_TASKS) {
+    for (entity, mut mesh_ready) in ready.iter_mut().take(MAX_MESH_UPLOADS_PER_FRAME) {
         if let Some(mesh) = mesh_ready.0.take() {
             commands.entity(entity).remove::<MeshReady>().insert((
                 Mesh3d(meshes.add(mesh)),

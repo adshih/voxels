@@ -6,7 +6,9 @@ use bevy::prelude::*;
 use crate::{Systems, world::{chunk::*, mesh::*}};
 
 pub const MAX_CHUNK_LOAD_PER_FRAME: usize = 20;
+pub const MAX_CHUNK_UNLOAD_PER_FRAME: usize = 40;
 pub const MAX_MESH_TASKS: usize = 100;
+pub const MAX_MESH_UPLOADS_PER_FRAME: usize = 20;
 
 pub struct WorldPlugin;
 
