@@ -1,3 +1,5 @@
+pub mod mesh;
+
 use glam::UVec3;
 use serde::{Deserialize, Serialize};
 

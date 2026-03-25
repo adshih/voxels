@@ -7,7 +7,7 @@ use bevy::prelude::*;
 use voxel_core::VoxelBuffer;
 use voxel_world::event::*;
 
-use crate::{connection::bridge::FromWorld, world::{MAX_CHUNK_LOAD_PER_FRAME, MAX_CHUNK_UNLOAD_PER_FRAME, NeedsMesh}};
+use crate::{connection::bridge::FromWorld, world::{MAX_CHUNK_LOAD_PER_FRAME, NeedsMesh}};
 
 #[derive(Component)]
 pub struct ChunkData(pub Arc<VoxelBuffer>);
@@ -70,10 +70,7 @@ pub fn process_chunk_unload_queue(
     mut chunk_unload_queue: ResMut<ChunkUnloadQueue>,
     mut chunk_entities: ResMut<ChunkEntities>,
 ) {
-    for _ in 0..MAX_CHUNK_UNLOAD_PER_FRAME {
-        let Some(pos) = chunk_unload_queue.0.pop() else {
-            break;
-        };
+    for pos in chunk_unload_queue.0.drain(..) {
         if let Some(entity) = chunk_entities.0.remove(&pos) {
             commands.entity(entity).despawn();
         }
