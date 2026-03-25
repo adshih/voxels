@@ -26,7 +26,7 @@ struct Camera {
 impl Default for Camera {
     fn default() -> Self {
         Self {
-            sensitivity: 2.0,
+            sensitivity: 0.1,
             pitch: 0.0,
             yaw: 0.0,
         }
@@ -48,13 +48,12 @@ fn camera_look(
     mut mouse_motion: MessageReader<MouseMotion>,
     camera: Single<(&mut Camera, &mut Transform)>,
     mut local_player: Single<&mut LocalPlayer>,
-    time: Res<Time>,
 ) {
     let (mut camera, mut transform) = camera.into_inner();
 
     for event in mouse_motion.read() {
-        camera.yaw -= event.delta.x * camera.sensitivity * time.delta_secs();
-        camera.pitch -= event.delta.y * camera.sensitivity * time.delta_secs();
+        camera.yaw -= event.delta.x * camera.sensitivity;
+        camera.pitch -= event.delta.y * camera.sensitivity;
     }
 
     camera.pitch = camera.pitch.clamp(-89.9, 89.9);
