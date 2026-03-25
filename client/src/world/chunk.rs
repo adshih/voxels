@@ -59,7 +59,9 @@ pub fn process_chunk_load_queue(
             ))
             .id();
 
-        chunk_entities.0.insert(pos, entity);
+        if let Some(old) = chunk_entities.0.insert(pos, entity) {
+            commands.entity(old).despawn();
+        }
     }
 }
 
