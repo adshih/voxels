@@ -25,6 +25,9 @@ use crate::{
     terrain::{CHUNK_RENDER_DISTANCE, Terrain, chunk_in_range, chunks_in_radius, world_to_chunk_pos},
 };
 
+pub const MOVEMENT_SPEED: f32 = 10.0;
+pub const SPRINT_MULTIPLIER: f32 = 2.0;
+
 pub struct VoxelWorld {
     players: HashMap<u32, PlayerState>,
     terrain: Terrain,
@@ -33,8 +36,6 @@ pub struct VoxelWorld {
 }
 
 impl VoxelWorld {
-    const MOVEMENT_SPEED: f32 = 10.0;
-    const SPRINT_MULTIPLIER: f32 = 2.0;
     const TICK_RATE: f32 = 60.0;
     const DT: f32 = 1.0 / Self::TICK_RATE;
 
@@ -222,8 +223,8 @@ impl VoxelWorld {
             let right = forward.cross(Vec3::Y);
             let move_dir = forward * dir.x + right * dir.z + Vec3::Y * dir.y;
 
-            let speed_mult = if sprint { Self::SPRINT_MULTIPLIER } else { 1.0 };
-            let speed = Self::MOVEMENT_SPEED * speed_mult;
+            let speed_mult = if sprint { SPRINT_MULTIPLIER } else { 1.0 };
+            let speed = MOVEMENT_SPEED * speed_mult;
 
             player_state.pos += move_dir * speed * dt;
 

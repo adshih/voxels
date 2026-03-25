@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use bevy::prelude::*;
-use voxel_world::{command::MovePlayer, event::*, player::PlayerInput};
+use voxel_world::{MOVEMENT_SPEED, SPRINT_MULTIPLIER, command::MovePlayer, event::*, player::PlayerInput};
 
 use crate::{Systems, connection::bridge::{FromWorld, WorldBridge}};
 
@@ -43,6 +43,12 @@ impl Plugin for PlayerPlugin {
                 (read_input, send_input)
                     .chain()
                     .in_set(Systems::Input)
+                    .run_if(has_local_player),
+            )
+            .add_systems(
+                Update,
+                predict_movement
+                    .in_set(Systems::Movement)
                     .run_if(has_local_player),
             );
     }
@@ -119,7 +125,9 @@ fn on_position_update(
     let event = on.event();
 
     if local_player.id == event.id {
-        transform.translation = event.pos;
+        if transform.translation.distance(event.pos) > 0.5 {
+            transform.translation = event.pos;
+        }
         return;
     }
 
@@ -128,6 +136,25 @@ fn on_position_update(
     {
         entity_commands.insert(Transform::from_translation(event.pos));
     }
+}
+
+fn predict_movement(
+    time: Res<Time>,
+    player: Single<(&LocalPlayer, &mut Transform)>,
+) {
+    let (local_player, mut transform) = player.into_inner();
+    let PlayerInput { dir, look, sprint } = local_player.input;
+
+    if dir == Vec3::ZERO {
+        return;
+    }
+
+    let forward = Vec3::new(look.x, 0.0, look.z).normalize_or_zero();
+    let right = forward.cross(Vec3::Y);
+    let move_dir = forward * dir.x + right * dir.z + Vec3::Y * dir.y;
+    let speed = MOVEMENT_SPEED * if sprint { SPRINT_MULTIPLIER } else { 1.0 };
+
+    transform.translation += move_dir * speed * time.delta_secs();
 }
 
 fn read_input(keyboard: Res<ButtonInput<KeyCode>>, mut local_player: Single<&mut LocalPlayer>) {
