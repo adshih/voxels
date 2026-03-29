@@ -18,15 +18,15 @@ A multiplayer voxel game built with Rust and Bevy.
 
 **Server:**
 ```bash
-cargo run --bin voxel-net
+cargo run --bin voxel-net --release
 ```
 
 **Client (singleplayer):**
 ```bash
-cargo run --bin client
+cargo run --bin client --release
 ```
 
 **Client (multiplayer):**
 ```bash
-cargo run --bin client -- --connect 127.0.0.1:8080 --name YourName
+cargo run --bin client --release -- --connect 127.0.0.1:8080 --name YourName
 ```
