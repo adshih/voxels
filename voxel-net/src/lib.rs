@@ -1,8 +1,7 @@
-pub mod message;
-
 use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 
 use quinn::{Connection as QuicConnection, Endpoint, ServerConfig};
+use serde::{Serialize, de::DeserializeOwned};
 use tokio::sync::{
     RwLock,
     mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel},
@@ -12,10 +11,8 @@ use voxel_world::{
     command::WorldCommand,
     envelope::Envelope,
     event::WorldEvent,
-    request::{Call, Connect, Ping, WorldRequest},
+    request::{Call, Connect, PendingRequest, Ping, WorldRequest},
 };
-
-use crate::message::{ClientCommand, ClientRequest, deserialize, serialize};
 
 const MAX_MSG_SIZE: usize = 1024 * 1024; // 1mb
 
@@ -84,7 +81,7 @@ async fn dispatch(
 async fn accept_connections(
     endpoint: Endpoint,
     cmd_tx: UnboundedSender<Envelope<WorldCommand>>,
-    req_tx: UnboundedSender<WorldRequest>,
+    req_tx: UnboundedSender<PendingRequest>,
     clients: Arc<RwLock<HashMap<u32, UnboundedSender<WorldEvent>>>>,
 ) {
     while let Some(incoming) = endpoint.accept().await {
@@ -105,7 +102,7 @@ async fn accept_connections(
 async fn session(
     connection: QuicConnection,
     cmd_tx: UnboundedSender<Envelope<WorldCommand>>,
-    req_tx: UnboundedSender<WorldRequest>,
+    req_tx: UnboundedSender<PendingRequest>,
     clients: Arc<RwLock<HashMap<u32, UnboundedSender<WorldEvent>>>>,
 ) -> anyhow::Result<()> {
     let (id, name) = handshake(&connection, &req_tx).await?;
@@ -131,14 +128,14 @@ async fn session(
 
 async fn handshake(
     connection: &QuicConnection,
-    req_tx: &UnboundedSender<WorldRequest>,
+    req_tx: &UnboundedSender<PendingRequest>,
 ) -> anyhow::Result<(u32, String)> {
     let (mut send, mut recv) = connection.accept_bi().await?;
     let bytes = recv.read_to_end(MAX_MSG_SIZE).await?;
     let connect: Connect = deserialize(&bytes)?;
 
     let (call, rx) = Call::new(connect.clone());
-    req_tx.send(WorldRequest::Connect(call))?;
+    req_tx.send(PendingRequest::Connect(call))?;
     let id = rx.await?;
 
     send.write_all(&serialize(&id)).await?;
@@ -154,25 +151,25 @@ async fn receive_commands(
 ) -> anyhow::Result<()> {
     loop {
         let data = connection.read_datagram().await?;
-        let cmd: ClientCommand = deserialize(&data)?;
+        let cmd: WorldCommand = deserialize(&data)?;
         cmd_tx.send(Envelope::from(id, cmd))?;
     }
 }
 
 async fn handle_requests(
     connection: QuicConnection,
-    req_tx: UnboundedSender<WorldRequest>,
+    req_tx: UnboundedSender<PendingRequest>,
 ) -> anyhow::Result<()> {
     loop {
         let (mut send, mut recv) = connection.accept_bi().await?;
         let bytes = recv.read_to_end(MAX_MSG_SIZE).await?;
-        let req: ClientRequest = deserialize(&bytes)?;
+        let req: WorldRequest = deserialize(&bytes)?;
 
         #[allow(clippy::single_match)]
         match req {
-            ClientRequest::Ping => {
+            WorldRequest::Ping => {
                 let (call, rx) = Call::new(Ping);
-                req_tx.send(WorldRequest::Ping(call))?;
+                req_tx.send(PendingRequest::Ping(call))?;
                 let pong = rx.await?;
 
                 send.write_all(&serialize(&pong)).await?;
@@ -202,4 +199,12 @@ async fn send_events(
         }
     }
     Ok(())
+}
+
+pub fn serialize<T: Serialize>(value: &T) -> Vec<u8> {
+    postcard::to_allocvec(value).unwrap()
+}
+
+pub fn deserialize<T: DeserializeOwned>(bytes: &[u8]) -> anyhow::Result<T> {
+    Ok(postcard::from_bytes(bytes)?)
 }

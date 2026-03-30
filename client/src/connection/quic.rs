@@ -10,8 +10,13 @@ use tokio::{
     runtime::Runtime,
     sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel},
 };
-use voxel_net::message::{ClientCommand, ClientRequest, deserialize, serialize};
-use voxel_world::{Bridge, command::WorldCommand, event::WorldEvent, request::WorldRequest};
+use voxel_net::{deserialize, serialize};
+use voxel_world::{
+    bridge::Bridge,
+    command::WorldCommand,
+    event::WorldEvent,
+    request::{PendingRequest, WorldRequest},
+};
 
 use crate::connection::cert::SkipServerVerification;
 
@@ -60,7 +65,7 @@ fn configure_client() -> anyhow::Result<ClientConfig> {
 async fn network_task(
     conn: QuicConnection,
     mut cmd_rx: UnboundedReceiver<WorldCommand>,
-    mut req_rx: UnboundedReceiver<WorldRequest>,
+    mut req_rx: UnboundedReceiver<PendingRequest>,
     event_tx: UnboundedSender<WorldEvent>,
 ) {
     tokio::select! {
@@ -75,11 +80,7 @@ async fn send_commands(
     cmd_rx: &mut UnboundedReceiver<WorldCommand>,
 ) -> anyhow::Result<()> {
     while let Some(cmd) = cmd_rx.recv().await {
-        let client_cmd = match cmd {
-            WorldCommand::MovePlayer(m) => ClientCommand::MovePlayer(m),
-            WorldCommand::Disconnect => break,
-        };
-        let bytes = serialize(&client_cmd);
+        let bytes = serialize(&cmd);
         conn.send_datagram(bytes.into())?;
     }
     Ok(())
@@ -112,11 +113,11 @@ async fn receive_events(
 
 async fn relay_requests(
     conn: QuicConnection,
-    req_rx: &mut UnboundedReceiver<WorldRequest>,
+    req_rx: &mut UnboundedReceiver<PendingRequest>,
 ) -> anyhow::Result<()> {
     while let Some(req) = req_rx.recv().await {
         match req {
-            WorldRequest::Connect(call) => {
+            PendingRequest::Connect(call) => {
                 let (mut send, mut recv) = conn.open_bi().await?;
                 send.write_all(&serialize(&call.payload)).await?;
                 send.finish()?;
@@ -125,9 +126,9 @@ async fn relay_requests(
                 let id: u32 = deserialize(&bytes)?;
                 call.reply(id);
             }
-            WorldRequest::Ping(call) => {
+            PendingRequest::Ping(call) => {
                 let (mut send, mut recv) = conn.open_bi().await?;
-                send.write_all(&serialize(&ClientRequest::Ping)).await?;
+                send.write_all(&serialize(&WorldRequest::Ping)).await?;
                 send.finish()?;
 
                 let bytes = recv.read_to_end(MAX_MSG_SIZE).await?;

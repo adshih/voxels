@@ -6,7 +6,11 @@ mod quic;
 use bevy::prelude::*;
 use voxel_world::event::*;
 
-use crate::{Settings, connection::bridge::{FromWorld, WorldBridge}, player};
+use crate::{
+    Settings,
+    connection::bridge::{FromWorld, WorldBridge},
+    player,
+};
 
 pub struct NetworkPlugin;
 

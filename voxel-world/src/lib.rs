@@ -6,8 +6,6 @@ pub mod player;
 pub mod request;
 mod terrain;
 
-pub use bridge::Bridge;
-
 use std::{
     collections::HashMap,
     time::{Duration, Instant},
@@ -21,8 +19,10 @@ use crate::{
     envelope::Envelope,
     event::*,
     player::{PlayerInput, PlayerState},
-    request::{Pong, WorldRequest},
-    terrain::{CHUNK_RENDER_DISTANCE, Terrain, chunk_in_range, chunks_in_radius, world_to_chunk_pos},
+    request::{PendingRequest, Pong},
+    terrain::{
+        CHUNK_RENDER_DISTANCE, Terrain, chunk_in_range, chunks_in_radius, world_to_chunk_pos,
+    },
 };
 
 pub const MOVEMENT_SPEED: f32 = 10.0;
@@ -51,7 +51,7 @@ impl VoxelWorld {
     pub fn run(
         mut self,
         mut command_rx: UnboundedReceiver<Envelope<WorldCommand>>,
-        mut req_rx: UnboundedReceiver<WorldRequest>,
+        mut req_rx: UnboundedReceiver<PendingRequest>,
         event_tx: UnboundedSender<Envelope<WorldEvent>>,
     ) {
         let mut next_tick = Instant::now();
@@ -69,7 +69,7 @@ impl VoxelWorld {
     fn tick(
         &mut self,
         command_rx: &mut UnboundedReceiver<Envelope<WorldCommand>>,
-        req_rx: &mut UnboundedReceiver<WorldRequest>,
+        req_rx: &mut UnboundedReceiver<PendingRequest>,
         dt: f32,
     ) -> Vec<Envelope<WorldEvent>> {
         while let Ok(cmd) = command_rx.try_recv() {
@@ -100,9 +100,9 @@ impl VoxelWorld {
         }
     }
 
-    fn handle(&mut self, req: WorldRequest) {
+    fn handle(&mut self, req: PendingRequest) {
         match req {
-            WorldRequest::Connect(call) => {
+            PendingRequest::Connect(call) => {
                 let id = self.add_player(call.payload.name.clone());
                 call.reply(id);
 
@@ -120,7 +120,7 @@ impl VoxelWorld {
                     ));
                 }
             }
-            WorldRequest::Ping(call) => {
+            PendingRequest::Ping(call) => {
                 call.reply(Pong);
             }
         }

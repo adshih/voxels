@@ -47,7 +47,13 @@ impl Request for Ping {
     type Response = Pong;
 }
 
+#[derive(Serialize, Deserialize)]
 pub enum WorldRequest {
+    Connect(Connect),
+    Ping,
+}
+
+pub enum PendingRequest {
     Connect(Call<Connect>),
     Ping(Call<Ping>),
 }

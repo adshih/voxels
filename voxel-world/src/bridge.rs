@@ -1,17 +1,21 @@
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
-use crate::{command::WorldCommand, event::WorldEvent, request::{Call, Connect, Ping, Pong, WorldRequest}};
+use crate::{
+    command::WorldCommand,
+    event::WorldEvent,
+    request::{Call, Connect, PendingRequest, Ping, Pong},
+};
 
 pub struct Bridge {
     cmd_tx: UnboundedSender<WorldCommand>,
-    req_tx: UnboundedSender<WorldRequest>,
+    req_tx: UnboundedSender<PendingRequest>,
     event_rx: UnboundedReceiver<WorldEvent>,
 }
 
 impl Bridge {
     pub fn new(
         cmd_tx: UnboundedSender<WorldCommand>,
-        req_tx: UnboundedSender<WorldRequest>,
+        req_tx: UnboundedSender<PendingRequest>,
         event_rx: UnboundedReceiver<WorldEvent>,
     ) -> Self {
         Self {
@@ -31,13 +35,13 @@ impl Bridge {
 
     pub fn connect(&self, name: String) -> anyhow::Result<u32> {
         let (call, rx) = Call::new(Connect { name });
-        let _ = self.req_tx.send(WorldRequest::Connect(call));
+        let _ = self.req_tx.send(PendingRequest::Connect(call));
         Ok(rx.blocking_recv()?)
     }
 
-    pub fn ping(&self) -> anyhow::Result<Pong> {
+    pub fn _ping(&self) -> anyhow::Result<Pong> {
         let (call, rx) = Call::new(Ping);
-        let _ = self.req_tx.send(WorldRequest::Ping(call));
+        let _ = self.req_tx.send(PendingRequest::Ping(call));
         Ok(rx.blocking_recv()?)
     }
 }

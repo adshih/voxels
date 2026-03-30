@@ -1,7 +1,9 @@
 use std::sync::{Arc, OnceLock};
 
 use tokio::sync::mpsc::{UnboundedReceiver, unbounded_channel};
-use voxel_world::{Bridge, VoxelWorld, command::WorldCommand, envelope::Envelope, event::WorldEvent};
+use voxel_world::{
+    VoxelWorld, bridge::Bridge, command::WorldCommand, envelope::Envelope, event::WorldEvent,
+};
 
 pub fn host(name: String) -> anyhow::Result<(u32, Bridge)> {
     let world = VoxelWorld::new(123);
