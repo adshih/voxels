@@ -4,6 +4,7 @@ pub mod envelope;
 pub mod event;
 pub mod player;
 pub mod request;
+pub mod physics;
 mod terrain;
 
 use std::{
@@ -15,14 +16,9 @@ use glam::Vec3;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 use crate::{
-    command::*,
-    envelope::Envelope,
-    event::*,
-    player::{PlayerInput, PlayerState},
-    request::{PendingRequest, Pong},
-    terrain::{
+    command::*, envelope::Envelope, event::*, physics::Physics, player::{PlayerInput, PlayerState}, request::{PendingRequest, Pong}, terrain::{
         CHUNK_RENDER_DISTANCE, Terrain, chunk_in_range, chunks_in_radius, world_to_chunk_pos,
-    },
+    }
 };
 
 pub const MOVEMENT_SPEED: f32 = 10.0;
@@ -55,6 +51,7 @@ impl VoxelWorld {
         event_tx: UnboundedSender<Envelope<WorldEvent>>,
     ) {
         let mut next_tick = Instant::now();
+        let physics = Physics::init();
 
         loop {
             for event in self.tick(&mut command_rx, &mut req_rx, Self::DT) {
