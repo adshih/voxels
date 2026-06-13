@@ -12,12 +12,26 @@ pub struct PlayerInput {
     pub sprint: bool,
 }
 
+#[derive(Default)]
+pub struct ChunkInterest {
+    pub anchor: Option<IVec3>,
+    pub loaded: HashSet<IVec3>,
+}
+
+impl ChunkInterest {
+    pub fn needs(&self, chunk_pos: IVec3) -> bool {
+        match self.anchor {
+            Some(anchor) => chunk_in_range(anchor, chunk_pos, CHUNK_RENDER_DISTANCE),
+            None => false,
+        }
+    }
+}
+
 pub struct PlayerState {
     pub pos: Vec3,
     pub look: Vec3,
     pub input: PlayerInput,
-    pub chunk_anchor: Option<IVec3>,
-    pub loaded_chunks: HashSet<IVec3>,
+    pub chunks: ChunkInterest,
     pub name: String,
 }
 
@@ -27,16 +41,8 @@ impl PlayerState {
             pos: Vec3::new(0.0, 60.0, 0.0),
             look: Vec3::default(),
             input: PlayerInput::default(),
-            chunk_anchor: None,
-            loaded_chunks: HashSet::new(),
+            chunks: ChunkInterest::default(),
             name,
-        }
-    }
-
-    pub fn needs_chunk(&self, chunk_pos: IVec3) -> bool {
-        match self.chunk_anchor {
-            Some(anchor) => chunk_in_range(anchor, chunk_pos, CHUNK_RENDER_DISTANCE),
-            None => false,
         }
     }
 }

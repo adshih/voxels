@@ -2,9 +2,9 @@ pub mod bridge;
 pub mod command;
 pub mod envelope;
 pub mod event;
+pub mod physics;
 pub mod player;
 pub mod request;
-pub mod physics;
 mod terrain;
 
 use std::{
@@ -16,9 +16,15 @@ use glam::Vec3;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 use crate::{
-    command::*, envelope::Envelope, event::*, physics::Physics, player::{PlayerInput, PlayerState}, request::{PendingRequest, Pong}, terrain::{
+    command::*,
+    envelope::Envelope,
+    event::*,
+    physics::Physics,
+    player::{PlayerInput, PlayerState},
+    request::{PendingRequest, Pong},
+    terrain::{
         CHUNK_RENDER_DISTANCE, Terrain, chunk_in_range, chunks_in_radius, world_to_chunk_pos,
-    }
+    },
 };
 
 pub const MOVEMENT_SPEED: f32 = 10.0;
@@ -151,20 +157,21 @@ impl VoxelWorld {
         for (&player_id, player_state) in self.players.iter_mut() {
             let chunk_pos = world_to_chunk_pos(player_state.pos);
 
-            if player_state.chunk_anchor.replace(chunk_pos) == Some(chunk_pos) {
+            if player_state.chunks.anchor.replace(chunk_pos) == Some(chunk_pos) {
                 continue;
             }
 
             // unload
             let to_unload: Vec<_> = player_state
-                .loaded_chunks
+                .chunks
+                .loaded
                 .iter()
                 .copied()
                 .filter(|&pos| !chunk_in_range(chunk_pos, pos, CHUNK_RENDER_DISTANCE))
                 .collect();
 
             for pos in to_unload {
-                player_state.loaded_chunks.remove(&pos);
+                player_state.chunks.loaded.remove(&pos);
                 self.events
                     .push(Envelope::to(player_id, ChunkUnloaded { pos }));
             }
@@ -172,13 +179,13 @@ impl VoxelWorld {
             // load
             let mut needed: Vec<_> = chunks_in_radius(chunk_pos, CHUNK_RENDER_DISTANCE)
                 .into_iter()
-                .filter(|pos| !player_state.loaded_chunks.contains(pos))
+                .filter(|pos| !player_state.chunks.loaded.contains(pos))
                 .collect();
             needed.sort_by_key(|pos| pos.distance_squared(chunk_pos));
 
             for pos in needed {
                 if let Some(data) = self.terrain.get(pos) {
-                    player_state.loaded_chunks.insert(pos);
+                    player_state.chunks.loaded.insert(pos);
                     self.events
                         .push(Envelope::to(player_id, ChunkLoaded { pos, data }));
                 } else {
@@ -191,8 +198,8 @@ impl VoxelWorld {
     fn poll_terrain(&mut self) {
         for (pos, data) in self.terrain.poll() {
             for (&player_id, player) in &mut self.players {
-                if player.needs_chunk(pos) && !player.loaded_chunks.contains(&pos) {
-                    player.loaded_chunks.insert(pos);
+                if player.chunks.needs(pos) && !player.chunks.loaded.contains(&pos) {
+                    player.chunks.loaded.insert(pos);
                     let event = Envelope::to(
                         player_id,
                         ChunkLoaded {
