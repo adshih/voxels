@@ -29,7 +29,7 @@ impl Default for DebugTextBundle {
         Self {
             text: Text::new(""),
             font: TextFont {
-                font_size: 18.0,
+                font_size: FontSize::Px(18.0),
                 ..default()
             },
             color: TextColor(Color::WHITE),
