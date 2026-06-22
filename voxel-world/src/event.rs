@@ -1,14 +1,13 @@
 use std::sync::Arc;
 
-use glam::{IVec3, Vec3};
 use serde::{Deserialize, Serialize};
 use voxel_core::VoxelBuffer;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct PlayerMoved {
     pub id: u32,
-    pub pos: Vec3,
-    pub look: Vec3,
+    pub pos: [f32; 3],
+    pub look: [f32; 3],
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -25,13 +24,13 @@ pub struct PlayerLeft {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ChunkLoaded {
-    pub pos: IVec3,
+    pub pos: [i32; 3],
     pub data: Arc<VoxelBuffer>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ChunkUnloaded {
-    pub pos: IVec3,
+    pub pos: [i32; 3],
 }
 
 #[derive(Clone, Serialize, Deserialize)]

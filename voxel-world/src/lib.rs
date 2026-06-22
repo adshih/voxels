@@ -19,7 +19,6 @@ use crate::{
     command::*,
     envelope::Envelope,
     event::*,
-    physics::Physics,
     player::{PlayerInput, PlayerState},
     request::{PendingRequest, Pong},
     terrain::{
@@ -57,7 +56,6 @@ impl VoxelWorld {
         event_tx: UnboundedSender<Envelope<WorldEvent>>,
     ) {
         let mut next_tick = Instant::now();
-        let physics = Physics::init();
 
         loop {
             for event in self.tick(&mut command_rx, &mut req_rx, Self::DT) {
@@ -172,8 +170,12 @@ impl VoxelWorld {
 
             for pos in to_unload {
                 player_state.chunks.loaded.remove(&pos);
-                self.events
-                    .push(Envelope::to(player_id, ChunkUnloaded { pos }));
+                self.events.push(Envelope::to(
+                    player_id,
+                    ChunkUnloaded {
+                        pos: pos.to_array(),
+                    },
+                ));
             }
 
             // load
@@ -186,8 +188,13 @@ impl VoxelWorld {
             for pos in needed {
                 if let Some(data) = self.terrain.get(pos) {
                     player_state.chunks.loaded.insert(pos);
-                    self.events
-                        .push(Envelope::to(player_id, ChunkLoaded { pos, data }));
+                    self.events.push(Envelope::to(
+                        player_id,
+                        ChunkLoaded {
+                            pos: pos.to_array(),
+                            data,
+                        },
+                    ));
                 } else {
                     self.terrain.request(pos);
                 }
@@ -203,7 +210,7 @@ impl VoxelWorld {
                     let event = Envelope::to(
                         player_id,
                         ChunkLoaded {
-                            pos,
+                            pos: pos.to_array(),
                             data: data.clone(),
                         },
                     );
@@ -216,6 +223,8 @@ impl VoxelWorld {
     fn process_player_inputs(&mut self, dt: f32) {
         for (player_id, player_state) in &mut self.players {
             let PlayerInput { dir, look, sprint } = player_state.input;
+            let dir = Vec3::from_array(dir);
+            let look = Vec3::from_array(look);
 
             player_state.look = look;
 
@@ -234,8 +243,8 @@ impl VoxelWorld {
 
             let event = Envelope::broadcast(PlayerMoved {
                 id: *player_id,
-                pos: player_state.pos,
-                look: player_state.look,
+                pos: player_state.pos.to_array(),
+                look: player_state.look.to_array(),
             });
             self.events.push(event);
         }

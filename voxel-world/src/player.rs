@@ -7,8 +7,8 @@ use crate::terrain::{CHUNK_RENDER_DISTANCE, chunk_in_range};
 
 #[derive(Serialize, Deserialize, Default, Debug, Clone)]
 pub struct PlayerInput {
-    pub dir: Vec3,
-    pub look: Vec3,
+    pub dir: [f32; 3],
+    pub look: [f32; 3],
     pub sprint: bool,
 }
 

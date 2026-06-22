@@ -97,11 +97,11 @@ impl Mesher for BlockMesher {
 
         let size = buf.size;
 
-        for x in 0..size.x {
-            for y in 0..size.y {
-                for z in 0..size.z {
+        for x in 0..size[0] {
+            for y in 0..size[1] {
+                for z in 0..size[2] {
                     let pos = UVec3::new(x, y, z);
-                    let voxel = buf.get(pos);
+                    let voxel = buf.get(pos.to_array());
 
                     if !voxel.is_empty() {
                         for face in CUBE_FACES {
@@ -139,16 +139,16 @@ fn should_render_face(voxels: &VoxelBuffer, pos: UVec3, face: CubeFace) -> bool 
     let neighbor = pos.as_ivec3() + face.offset();
 
     if neighbor.x < 0
-        || neighbor.x >= voxels.size.x as i32
+        || neighbor.x >= voxels.size[0] as i32
         || neighbor.y < 0
-        || neighbor.y >= voxels.size.y as i32
+        || neighbor.y >= voxels.size[1] as i32
         || neighbor.z < 0
-        || neighbor.z >= voxels.size.z as i32
+        || neighbor.z >= voxels.size[2] as i32
     {
         return true;
     }
 
-    voxels.get(neighbor.as_uvec3()).is_empty()
+    voxels.get(neighbor.as_uvec3().to_array()).is_empty()
 }
 
 fn add_face(

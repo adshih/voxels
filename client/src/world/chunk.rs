@@ -26,7 +26,9 @@ pub fn on_chunk_loaded(on: On<FromWorld<ChunkLoaded>>, mut queue: ResMut<ChunkLo
     if event.data.is_all_empty() {
         return;
     }
-    queue.0.push_back((event.pos, event.data.clone()));
+    queue
+        .0
+        .push_back((IVec3::from_array(event.pos), event.data.clone()));
 }
 
 pub fn on_chunk_unloaded(
@@ -35,8 +37,9 @@ pub fn on_chunk_unloaded(
     mut unload_queue: ResMut<ChunkUnloadQueue>,
 ) {
     let event = on.event();
-    load_queue.0.retain(|(p, _)| *p != event.pos);
-    unload_queue.0.push(event.pos);
+    let pos = IVec3::from_array(event.pos);
+    load_queue.0.retain(|(p, _)| *p != pos);
+    unload_queue.0.push(pos);
 }
 
 pub fn process_chunk_load_queue(
@@ -49,7 +52,7 @@ pub fn process_chunk_load_queue(
             break;
         };
 
-        let world_pos = pos.as_vec3() * data.size.as_vec3();
+        let world_pos = pos.as_vec3() * UVec3::from_array(data.size).as_vec3();
 
         let entity = commands
             .spawn((

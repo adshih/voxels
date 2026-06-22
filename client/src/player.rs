@@ -123,10 +123,11 @@ fn on_position_update(
 ) {
     let (local_player, mut transform) = player.into_inner();
     let event = on.event();
+    let pos = Vec3::from_array(event.pos);
 
     if local_player.id == event.id {
-        if transform.translation.distance(event.pos) > 0.5 {
-            transform.translation = event.pos;
+        if transform.translation.distance(pos) > 0.5 {
+            transform.translation = pos;
         }
         return;
     }
@@ -134,7 +135,7 @@ fn on_position_update(
     if let Some(&entity) = player_entities.0.get(&event.id)
         && let Ok(mut entity_commands) = commands.get_entity(entity)
     {
-        entity_commands.insert(Transform::from_translation(event.pos));
+        entity_commands.insert(Transform::from_translation(pos));
     }
 }
 
@@ -144,6 +145,8 @@ fn predict_movement(
 ) {
     let (local_player, mut transform) = player.into_inner();
     let PlayerInput { dir, look, sprint } = local_player.input;
+    let dir = Vec3::from_array(dir);
+    let look = Vec3::from_array(look);
 
     if dir == Vec3::ZERO {
         return;
@@ -180,7 +183,7 @@ fn read_input(keyboard: Res<ButtonInput<KeyCode>>, mut local_player: Single<&mut
         input_dir.y -= 1.0;
     }
 
-    local_player.input.dir = input_dir;
+    local_player.input.dir = input_dir.to_array();
     local_player.input.sprint = sprint;
 }
 

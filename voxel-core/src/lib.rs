@@ -1,6 +1,5 @@
 pub mod mesh;
 
-use glam::UVec3;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Copy, Clone, Eq, PartialEq, Debug)]
@@ -18,25 +17,25 @@ impl Voxel {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct VoxelBuffer {
-    pub size: UVec3,
+    pub size: [u32; 3],
     pub voxels: Vec<Voxel>,
 }
 
 impl VoxelBuffer {
-    pub fn new(size: UVec3) -> Self {
-        let volume = (size.x * size.y * size.z) as usize;
+    pub fn new(size: [u32; 3]) -> Self {
+        let volume = (size[0] * size[1] * size[2]) as usize;
         Self {
             size,
             voxels: vec![Voxel::EMPTY; volume],
         }
     }
 
-    pub fn get(&self, pos: UVec3) -> Voxel {
+    pub fn get(&self, pos: [u32; 3]) -> Voxel {
         let i = self.index(pos);
         self.voxels[i]
     }
 
-    pub fn set(&mut self, pos: UVec3, voxel: Voxel) {
+    pub fn set(&mut self, pos: [u32; 3], voxel: Voxel) {
         let i = self.index(pos);
         self.voxels[i] = voxel;
     }
@@ -45,7 +44,7 @@ impl VoxelBuffer {
         self.voxels.iter().all(|v| v.is_empty())
     }
 
-    fn index(&self, pos: UVec3) -> usize {
-        (pos.x + pos.y * self.size.x + pos.z * self.size.x * self.size.y) as usize
+    fn index(&self, pos: [u32; 3]) -> usize {
+        (pos[0] + pos[1] * self.size[0] + pos[2] * self.size[0] * self.size[1]) as usize
     }
 }

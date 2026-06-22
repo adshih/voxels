@@ -65,7 +65,7 @@ fn camera_look(
         0.0,
     );
 
-    local_player.input.look = transform.forward().into();
+    local_player.input.look = Vec3::from(transform.forward()).to_array();
 }
 
 fn follow_player(

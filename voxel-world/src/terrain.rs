@@ -25,7 +25,7 @@ impl TerrainGenerator {
     }
 
     pub fn generate(&self, pos: IVec3) -> VoxelBuffer {
-        let mut buffer = VoxelBuffer::new(CHUNK_SIZE);
+        let mut buffer = VoxelBuffer::new(CHUNK_SIZE.to_array());
 
         let scale = 0.02;
         let height_scale = 30.0;
@@ -54,9 +54,7 @@ impl TerrainGenerator {
                         Voxel::EMPTY
                     };
 
-                    let pos = UVec3::new(x, y, z);
-
-                    buffer.set(pos, voxel);
+                    buffer.set([x, y, z], voxel);
                 }
             }
         }
