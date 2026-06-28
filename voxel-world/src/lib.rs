@@ -31,18 +31,19 @@ pub const MOVEMENT_SPEED: f32 = 10.0;
 pub const SPRINT_MULTIPLIER: f32 = 2.0;
 pub const THRUST: f32 = 20.0;
 
+pub const TICK_RATE: f32 = 60.0;
+pub const DT: f32 = 1.0 / TICK_RATE;
+
 pub struct VoxelWorld {
     players: HashMap<u32, PlayerState>,
     terrain: Terrain,
     physics: Physics,
     events: Vec<Envelope<WorldEvent>>,
     next_id: u32,
+    tick: u64,
 }
 
 impl VoxelWorld {
-    const TICK_RATE: f32 = 60.0;
-    const DT: f32 = 1.0 / Self::TICK_RATE;
-
     pub fn new(seed: u32) -> Self {
         Self {
             players: HashMap::new(),
@@ -50,6 +51,7 @@ impl VoxelWorld {
             physics: Physics::init(),
             events: Vec::new(),
             next_id: 1,
+            tick: 0
         }
     }
 
@@ -62,11 +64,11 @@ impl VoxelWorld {
         let mut next_tick = Instant::now();
 
         loop {
-            for event in self.tick(&mut command_rx, &mut req_rx, Self::DT) {
+            for event in self.tick(&mut command_rx, &mut req_rx, DT) {
                 let _ = event_tx.send(event);
             }
 
-            next_tick += Duration::from_secs_f32(Self::DT);
+            next_tick += Duration::from_secs_f32(DT);
             std::thread::sleep(next_tick.saturating_duration_since(Instant::now()));
         }
     }
@@ -77,6 +79,8 @@ impl VoxelWorld {
         req_rx: &mut UnboundedReceiver<PendingRequest>,
         dt: f32,
     ) -> Vec<Envelope<WorldEvent>> {
+        self.tick += 1;
+
         while let Ok(cmd) = command_rx.try_recv() {
             self.execute(cmd);
         }
@@ -252,6 +256,7 @@ impl VoxelWorld {
     fn broadcast_movement(&mut self) {
         for (player_id, player_state) in &self.players {
             let event = Envelope::broadcast(PlayerMoved {
+                tick: self.tick,
                 id: *player_id,
                 pos: self.physics.position(player_state.body).to_array(),
                 look: player_state.input.look,

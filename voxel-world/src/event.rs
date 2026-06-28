@@ -5,6 +5,7 @@ use voxel_core::VoxelBuffer;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct PlayerMoved {
+    pub tick: u64,
     pub id: u32,
     pub pos: [f32; 3],
     pub look: [f32; 3],
