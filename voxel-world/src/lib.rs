@@ -19,6 +19,7 @@ use crate::{
     command::*,
     envelope::Envelope,
     event::*,
+    physics::Physics,
     player::{PlayerInput, PlayerState},
     request::{PendingRequest, Pong},
     terrain::{
@@ -28,10 +29,12 @@ use crate::{
 
 pub const MOVEMENT_SPEED: f32 = 10.0;
 pub const SPRINT_MULTIPLIER: f32 = 2.0;
+pub const THRUST: f32 = 20.0;
 
 pub struct VoxelWorld {
     players: HashMap<u32, PlayerState>,
     terrain: Terrain,
+    physics: Physics,
     events: Vec<Envelope<WorldEvent>>,
     next_id: u32,
 }
@@ -44,6 +47,7 @@ impl VoxelWorld {
         Self {
             players: HashMap::new(),
             terrain: Terrain::new(seed),
+            physics: Physics::init(),
             events: Vec::new(),
             next_id: 1,
         }
@@ -81,7 +85,12 @@ impl VoxelWorld {
             self.handle(req);
         }
 
-        self.process_player_inputs(dt);
+        // movement
+        self.process_player_inputs();
+        self.physics.step(dt);
+        self.broadcast_movement();
+
+        // terrain
         self.sync_player_chunks();
         self.poll_terrain();
 
@@ -135,13 +144,16 @@ impl VoxelWorld {
             id,
             name: name.clone(),
         }));
-        self.players.insert(id, PlayerState::new(name));
+        let body = self.physics.add_body(Vec3::new(0.0, 60.0, 0.0));
+        self.players.insert(id, PlayerState::new(name, body));
 
         id
     }
 
     fn remove_player(&mut self, id: u32) {
         if let Some(player) = self.players.remove(&id) {
+            self.physics.remove_body(player.body);
+
             let event = Envelope::broadcast(PlayerLeft {
                 id,
                 name: player.name,
@@ -153,7 +165,7 @@ impl VoxelWorld {
 
     fn sync_player_chunks(&mut self) {
         for (&player_id, player_state) in self.players.iter_mut() {
-            let chunk_pos = world_to_chunk_pos(player_state.pos);
+            let chunk_pos = world_to_chunk_pos(self.physics.position(player_state.body));
 
             if player_state.chunks.anchor.replace(chunk_pos) == Some(chunk_pos) {
                 continue;
@@ -220,31 +232,29 @@ impl VoxelWorld {
         }
     }
 
-    fn process_player_inputs(&mut self, dt: f32) {
-        for (player_id, player_state) in &mut self.players {
+    fn process_player_inputs(&mut self) {
+        for player_state in self.players.values() {
             let PlayerInput { dir, look, sprint } = player_state.input;
             let dir = Vec3::from_array(dir);
             let look = Vec3::from_array(look);
-
-            player_state.look = look;
-
-            if dir == Vec3::ZERO {
-                continue;
-            }
 
             let forward = Vec3::new(look.x, 0.0, look.z).normalize_or_zero();
             let right = forward.cross(Vec3::Y);
             let move_dir = forward * dir.x + right * dir.z + Vec3::Y * dir.y;
 
             let speed_mult = if sprint { SPRINT_MULTIPLIER } else { 1.0 };
-            let speed = MOVEMENT_SPEED * speed_mult;
+            let force = move_dir * THRUST * speed_mult;
 
-            player_state.pos += move_dir * speed * dt;
+            self.physics.set_force(player_state.body, force);
+        }
+    }
 
+    fn broadcast_movement(&mut self) {
+        for (player_id, player_state) in &self.players {
             let event = Envelope::broadcast(PlayerMoved {
                 id: *player_id,
-                pos: player_state.pos.to_array(),
-                look: player_state.look.to_array(),
+                pos: self.physics.position(player_state.body).to_array(),
+                look: player_state.input.look,
             });
             self.events.push(event);
         }

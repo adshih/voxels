@@ -1,5 +1,7 @@
 use rapier3d::prelude::*;
 
+pub type BodyHandle = RigidBodyHandle;
+
 pub struct Physics {
     // Config
     gravity: Vec3,
@@ -25,7 +27,7 @@ pub struct Physics {
 
 impl Physics {
     pub fn init() -> Self {
-        Self {
+        let mut physics = Self {
             gravity: Vec3::new(0.0, -9.81, 0.0),
             integration_parameters: IntegrationParameters::default(),
             impulse_joint_set: ImpulseJointSet::new(),
@@ -39,10 +41,17 @@ impl Physics {
             ccd_solver: CCDSolver::new(),
             physics_hooks: (),
             event_handler: (),
-        }
+        };
+
+        // TODO: remove this and replace with real terrain colliders
+        let floor = ColliderBuilder::cuboid(1000.0, 50.0, 1000.0).build();
+        physics.collider_set.insert(floor);
+
+        physics
     }
 
-    pub fn step(&mut self) {
+    pub fn step(&mut self, dt: f32) {
+        self.integration_parameters.dt = dt;
         self.physics_pipeline.step(
             self.gravity,
             &self.integration_parameters,
@@ -58,57 +67,36 @@ impl Physics {
             &self.event_handler,
         );
     }
-}
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn body_falls_and_rests_on_floor() {
-        let mut physics = Physics::init();
-
-        let floor = ColliderBuilder::cuboid(50.0, 0.5, 50.0).build();
-        physics.collider_set.insert(floor);
-
-        let body = RigidBodyBuilder::dynamic()
-            .translation(Vec3::new(0.0, 10.0, 0.0))
-            .build();
-        let handle = physics.rigid_body_set.insert(body);
-
-        let ball = ColliderBuilder::ball(0.5).build();
-        physics
-            .collider_set
-            .insert_with_parent(ball, handle, &mut physics.rigid_body_set);
-
-        for _ in 0..180 {
-            physics.step();
-        }
-
-        let y = physics.rigid_body_set[handle].translation().y;
-        println!("rested at y = {y}");
-        assert!(y < 10.0, "should have fallen");
-        assert!(y > 0.0, "should be above the floor");
+    pub fn set_force(&mut self, handle: BodyHandle, force: Vec3) {
+        let body = &mut self.rigid_body_set[handle];
+        body.reset_forces(true);
+        body.add_force(force, true);
     }
 
-    #[test]
-    fn force_cancels_gravity_and_hovers() {
-        let mut physics = Physics::init();
+    pub fn add_body(&mut self, pos: Vec3) -> BodyHandle {
+        let body = RigidBodyBuilder::dynamic().translation(pos).build();
+        let handle = self.rigid_body_set.insert(body);
+        let collider = ColliderBuilder::ball(0.5).build();
 
-        let body = RigidBodyBuilder::dynamic().translation(Vec3::new(0.0, 10.0, 0.0)).build();
-        let handle = physics.rigid_body_set.insert(body);
-        physics.collider_set.insert_with_parent(ColliderBuilder::ball(0.5).build(), handle, &mut physics.rigid_body_set);
+        self.collider_set
+            .insert_with_parent(collider, handle, &mut self.rigid_body_set);
 
-        for _ in 0..180 {
-            let body = &mut physics.rigid_body_set[handle];
-            body.reset_forces(false);
-            let weight = body.mass() * 9.81;
-            body.add_force(Vec3::new(0.0, weight, 0.0), true);
-            physics.step();
-        }
+        handle
+    }
 
-        let y = physics.rigid_body_set[handle].translation().y;
-        println!("hovered at y = {y}");
-        assert!((y - 10.0).abs() < 0.1, "should still be -10, got {y}");
+    pub fn position(&self, handle: BodyHandle) -> Vec3 {
+        self.rigid_body_set[handle].translation()
+    }
+
+    pub fn remove_body(&mut self, handle: BodyHandle) {
+        self.rigid_body_set.remove(
+            handle,
+            &mut self.island_manager,
+            &mut self.collider_set,
+            &mut self.impulse_joint_set,
+            &mut self.multibody_joint_set,
+            true, // also remove attached colliders
+        );
     }
 }

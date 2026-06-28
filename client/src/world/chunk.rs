@@ -7,7 +7,10 @@ use bevy::prelude::*;
 use voxel_core::VoxelBuffer;
 use voxel_world::event::*;
 
-use crate::{connection::bridge::FromWorld, world::{MAX_CHUNK_LOAD_PER_FRAME, NeedsMesh}};
+use crate::{
+    connection::bridge::FromWorld,
+    world::{MAX_CHUNK_LOAD_PER_FRAME, NeedsMesh},
+};
 
 #[derive(Component)]
 pub struct ChunkData(pub Arc<VoxelBuffer>);

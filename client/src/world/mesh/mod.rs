@@ -5,7 +5,9 @@ use bevy::{
     tasks::{AsyncComputeTaskPool, Task, block_on, poll_once},
 };
 
-use crate::world::{ChunkData, MAX_MESH_TASKS, MAX_MESH_UPLOADS_PER_FRAME, mesh::generate::generate_mesh};
+use crate::world::{
+    ChunkData, MAX_MESH_TASKS, MAX_MESH_UPLOADS_PER_FRAME, mesh::generate::generate_mesh,
+};
 
 #[derive(Component)]
 pub struct NeedsMesh;

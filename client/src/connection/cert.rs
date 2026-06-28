@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
 use quinn::rustls::{
-    self, DigitallySignedStruct, SignatureScheme, client::danger,
+    self, DigitallySignedStruct, SignatureScheme,
+    client::danger,
     crypto::{CryptoProvider, verify_tls12_signature, verify_tls13_signature},
     pki_types::{CertificateDer, ServerName, UnixTime},
 };
