@@ -16,7 +16,7 @@ const RESYNC_RATE: f64 = 2.0;
 struct Snapshot {
     tick: u64,
     pos: Vec3,
-    look: Vec3,
+    _look: Vec3,
 }
 
 #[derive(Component, Default)]
@@ -195,7 +195,7 @@ fn on_position_update(
         buffer.push(Snapshot {
             tick: event.tick,
             pos: Vec3::from_array(event.pos),
-            look: Vec3::from_array(event.look),
+            _look: Vec3::from_array(event.look),
         });
     }
 

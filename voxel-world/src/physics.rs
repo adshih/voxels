@@ -1,4 +1,12 @@
+use glam::IVec3;
 use rapier3d::prelude::*;
+use std::collections::HashMap;
+use voxel_core::{
+    VoxelBuffer,
+    mesh::{Mesher, block::BlockMesher},
+};
+
+use crate::terrain::CHUNK_SIZE;
 
 pub type BodyHandle = RigidBodyHandle;
 
@@ -12,6 +20,7 @@ pub struct Physics {
     multibody_joint_set: MultibodyJointSet,
     rigid_body_set: RigidBodySet,
     collider_set: ColliderSet,
+    chunk_colliders: HashMap<IVec3, ColliderHandle>,
 
     // Machinery
     physics_pipeline: PhysicsPipeline,
@@ -27,13 +36,24 @@ pub struct Physics {
 
 impl Physics {
     pub fn init() -> Self {
-        let mut physics = Self {
+        let mut physics = Self::empty();
+
+        // TODO: remove this and replace with real terrain colliders
+        let floor = ColliderBuilder::cuboid(1000.0, 50.0, 1000.0).build();
+        physics.collider_set.insert(floor);
+
+        physics
+    }
+
+    fn empty() -> Self {
+        Self {
             gravity: Vec3::new(0.0, -9.81, 0.0),
             integration_parameters: IntegrationParameters::default(),
             impulse_joint_set: ImpulseJointSet::new(),
             multibody_joint_set: MultibodyJointSet::new(),
             rigid_body_set: RigidBodySet::new(),
             collider_set: ColliderSet::new(),
+            chunk_colliders: HashMap::new(),
             physics_pipeline: PhysicsPipeline::new(),
             island_manager: IslandManager::new(),
             broad_phase: DefaultBroadPhase::new(),
@@ -41,13 +61,7 @@ impl Physics {
             ccd_solver: CCDSolver::new(),
             physics_hooks: (),
             event_handler: (),
-        };
-
-        // TODO: remove this and replace with real terrain colliders
-        let floor = ColliderBuilder::cuboid(1000.0, 50.0, 1000.0).build();
-        physics.collider_set.insert(floor);
-
-        physics
+        }
     }
 
     pub fn step(&mut self, dt: f32) {
@@ -98,5 +112,51 @@ impl Physics {
             &mut self.multibody_joint_set,
             true, // also remove attached colliders
         );
+    }
+
+    pub fn add_chunk(&mut self, chunk_pos: IVec3, buffer: &VoxelBuffer) {
+        if self.chunk_colliders.contains_key(&chunk_pos) {
+            return;
+        }
+
+        let Some(mesh) = BlockMesher.generate(buffer) else {
+            return;
+        };
+
+        let vertices: Vec<Vec3> = mesh
+            .positions
+            .iter()
+            .copied()
+            .map(Vec3::from_array)
+            .collect();
+        let indices: Vec<[u32; 3]> = mesh
+            .indices
+            .chunks_exact(3)
+            .map(|t| [t[0], t[1], t[2]])
+            .collect();
+
+        let origin = (chunk_pos * CHUNK_SIZE.as_ivec3()).as_vec3();
+
+        let collider = match ColliderBuilder::trimesh(vertices, indices) {
+            Ok(builder) => builder.translation(origin).build(),
+            Err(err) => {
+                eprintln!("skipping trimesh collider for chunk {chunk_pos:?}: {err:?}");
+                return;
+            }
+        };
+
+        let handle = self.collider_set.insert(collider);
+        self.chunk_colliders.insert(chunk_pos, handle);
+    }
+
+    pub fn remove_chunk(&mut self, chunk_pos: IVec3) {
+        if let Some(handle) = self.chunk_colliders.remove(&chunk_pos) {
+            self.collider_set.remove(
+                handle,
+                &mut self.island_manager,
+                &mut self.rigid_body_set,
+                true
+            );
+        }
     }
 }
