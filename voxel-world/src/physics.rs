@@ -36,13 +36,7 @@ pub struct Physics {
 
 impl Physics {
     pub fn init() -> Self {
-        let mut physics = Self::empty();
-
-        // TODO: remove this and replace with real terrain colliders
-        let floor = ColliderBuilder::cuboid(1000.0, 50.0, 1000.0).build();
-        physics.collider_set.insert(floor);
-
-        physics
+        Self::empty()
     }
 
     fn empty() -> Self {
@@ -155,8 +149,16 @@ impl Physics {
                 handle,
                 &mut self.island_manager,
                 &mut self.rigid_body_set,
-                true
+                true,
             );
         }
+    }
+
+    pub fn has_chunk(&self, chunk_pos: IVec3) -> bool {
+        self.chunk_colliders.contains_key(&chunk_pos)
+    }
+
+    pub fn loaded_chunks(&self) -> impl Iterator<Item = IVec3> + '_ {
+        self.chunk_colliders.keys().copied()
     }
 }

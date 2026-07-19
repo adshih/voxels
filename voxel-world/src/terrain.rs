@@ -141,3 +141,15 @@ pub fn chunks_in_radius(center: IVec3, radius: i32) -> Vec<IVec3> {
     }
     positions
 }
+
+pub fn chunks_in_box(center: IVec3, radius: i32) -> Vec<IVec3> {
+    let mut positions = Vec::new();
+    for x in -radius..=radius {
+        for y in -radius..=radius {
+            for z in -radius..=radius {
+                positions.push(center + IVec3::new(x, y, z));
+            }
+        }
+    }
+    positions
+}

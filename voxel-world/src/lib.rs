@@ -8,11 +8,11 @@ pub mod request;
 mod terrain;
 
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     time::{Duration, Instant},
 };
 
-use glam::Vec3;
+use glam::{IVec3, Vec3};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 use crate::{
@@ -23,9 +23,12 @@ use crate::{
     player::{PlayerInput, PlayerState},
     request::{PendingRequest, Pong},
     terrain::{
-        CHUNK_RENDER_DISTANCE, Terrain, chunk_in_range, chunks_in_radius, world_to_chunk_pos,
+        CHUNK_RENDER_DISTANCE, Terrain, chunk_in_range, chunks_in_box, chunks_in_radius,
+        world_to_chunk_pos,
     },
 };
+
+pub const PHYSICS_RADIUS: i32 = 2;
 
 pub const MOVEMENT_SPEED: f32 = 10.0;
 pub const SPRINT_MULTIPLIER: f32 = 2.0;
@@ -51,7 +54,7 @@ impl VoxelWorld {
             physics: Physics::init(),
             events: Vec::new(),
             next_id: 1,
-            tick: 0
+            tick: 0,
         }
     }
 
@@ -97,6 +100,9 @@ impl VoxelWorld {
         // terrain
         self.sync_player_chunks();
         self.poll_terrain();
+
+        // physics
+        self.sync_physics_chunks();
 
         std::mem::take(&mut self.events)
     }
@@ -215,6 +221,36 @@ impl VoxelWorld {
                     self.terrain.request(pos);
                 }
             }
+        }
+    }
+
+    fn sync_physics_chunks(&mut self) {
+        let mut desired: HashSet<IVec3> = HashSet::new();
+        for player in self.players.values() {
+            let chunk = world_to_chunk_pos(self.physics.position(player.body));
+            desired.extend(chunks_in_box(chunk, PHYSICS_RADIUS));
+        }
+
+        for &pos in &desired {
+            if self.physics.has_chunk(pos) {
+                continue;
+            }
+
+            if let Some(data) = self.terrain.get(pos) {
+                self.physics.add_chunk(pos, &data);
+            } else {
+                self.terrain.request(pos);
+            }
+        }
+
+        let stale: Vec<IVec3> = self
+            .physics
+            .loaded_chunks()
+            .filter(|pos| !desired.contains(pos))
+            .collect();
+
+        for pos in stale {
+            self.physics.remove_chunk(pos);
         }
     }
 
