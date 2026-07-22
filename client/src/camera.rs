@@ -2,6 +2,9 @@ use bevy::{input::mouse::MouseMotion, prelude::*};
 
 use crate::{Systems, player::LocalPlayer};
 
+const CAMERA_DISTANCE: f32 = 8.0;
+const CAMERA_HEIGHT: f32 = 2.0;
+
 pub struct CameraPlugin;
 
 impl Plugin for CameraPlugin {
@@ -72,5 +75,8 @@ fn follow_player(
     mut camera_transform: Single<&mut Transform, With<Camera>>,
     player_transform: Single<&Transform, (With<LocalPlayer>, Without<Camera>)>,
 ) {
-    camera_transform.translation = player_transform.translation;
+    let focus = player_transform.translation + Vec3::Y * CAMERA_HEIGHT;
+    let forward = camera_transform.forward();
+
+    camera_transform.translation = focus - forward * CAMERA_DISTANCE;
 }

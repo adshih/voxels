@@ -114,7 +114,12 @@ fn has_local_player(player: Option<Single<&LocalPlayer>>) -> bool {
     player.is_some()
 }
 
-fn on_connected(on: On<Connected>, mut commands: Commands) {
+fn on_connected(
+    on: On<Connected>,
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
     let event = on.event();
     commands.spawn((
         LocalPlayer {
@@ -123,6 +128,8 @@ fn on_connected(on: On<Connected>, mut commands: Commands) {
             input: PlayerInput::default(),
         },
         Transform::from_xyz(0.0, 60.0, 0.0),
+        Mesh3d(meshes.add(Capsule3d::default())),
+        MeshMaterial3d(materials.add(Color::srgb(0.3, 0.5, 0.9))),
         SnapshotBuffer::default(),
     ));
 }
