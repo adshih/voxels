@@ -12,11 +12,14 @@ const INTERP_DELAY: f64 = 2.0;
 const MAX_DRIFT_TICKS: f64 = 8.0;
 const RESYNC_RATE: f64 = 2.0;
 
+#[derive(Component)]
+pub struct Head(Entity);
+
 #[derive(Clone, Copy)]
 struct Snapshot {
     tick: u64,
     pos: Vec3,
-    _look: Vec3,
+    look: Vec3,
 }
 
 #[derive(Component, Default)]
@@ -121,17 +124,18 @@ fn on_connected(
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     let event = on.event();
-    commands.spawn((
-        LocalPlayer {
-            id: event.id,
-            name: event.name.clone(),
-            input: PlayerInput::default(),
-        },
-        Transform::from_xyz(0.0, 60.0, 0.0),
-        Mesh3d(meshes.add(Capsule3d::default())),
-        MeshMaterial3d(materials.add(Color::srgb(0.3, 0.5, 0.9))),
-        SnapshotBuffer::default(),
-    ));
+    let root = spawn_player_model(
+        &mut commands,
+        &mut meshes,
+        &mut materials,
+        Color::srgb(0.3, 0.5, 0.9),
+    );
+
+    commands.entity(root).insert(LocalPlayer {
+        id: event.id,
+        name: event.name.clone(),
+        input: PlayerInput::default(),
+    });
 }
 
 fn on_player_joined(
@@ -150,19 +154,14 @@ fn on_player_joined(
         return;
     }
 
-    let entity = commands
-        .spawn((
-            Name::new(format!("RemotePlayer_{}", event.id)),
-            RemotePlayer {
-                id: event.id,
-                name: event.name.clone(),
-            },
-            Transform::from_xyz(0.0, 60.0, 0.0),
-            Mesh3d(meshes.add(Capsule3d::default())),
-            MeshMaterial3d(materials.add(Color::WHITE)),
-            SnapshotBuffer::default(),
-        ))
-        .id();
+    let entity = spawn_player_model(&mut commands, &mut meshes, &mut materials, Color::WHITE);
+    commands.entity(entity).insert((
+        Name::new(format!("RemotePlayer_{}", event.id)),
+        RemotePlayer {
+            id: event.id,
+            name: event.name.clone(),
+        },
+    ));
 
     players.0.insert(event.id, entity);
 }
@@ -202,7 +201,7 @@ fn on_position_update(
         buffer.push(Snapshot {
             tick: event.tick,
             pos: Vec3::from_array(event.pos),
-            _look: Vec3::from_array(event.look),
+            look: Vec3::from_array(event.look),
         });
     }
 
@@ -267,11 +266,62 @@ fn advance_render_clock(time: Res<Time>, mut clock: ResMut<RenderClock>) {
 
 fn interpolate_players(
     clock: Res<RenderClock>,
-    mut query: Query<(&SnapshotBuffer, &mut Transform)>,
+    mut players: Query<(&SnapshotBuffer, &mut Transform, &Head)>,
+    mut heads: Query<&mut Transform, Without<SnapshotBuffer>>,
 ) {
-    for (buffer, mut transform) in &mut query {
-        if let Some((a, b, alpha)) = buffer.sample(clock.tick) {
-            transform.translation = a.pos.lerp(b.pos, alpha);
+    for (buffer, mut transform, head) in &mut players {
+        let Some((a, b, alpha)) = buffer.sample(clock.tick) else {
+            continue;
+        };
+        transform.translation = a.pos.lerp(b.pos, alpha);
+
+        let look = a.look.lerp(b.look, alpha).normalize_or_zero();
+        if look == Vec3::ZERO {
+            continue;
+        }
+
+        let flat = look.with_y(0.0);
+        if flat != Vec3::ZERO {
+            transform.look_to(flat, Vec3::Y);
+        }
+
+        if let Ok(mut head_transform) = heads.get_mut(head.0) {
+            head_transform.rotation = Quat::from_rotation_x(look.y.asin());
         }
     }
+}
+
+fn spawn_player_model(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
+    color: Color,
+) -> Entity {
+    let material = materials.add(color);
+
+    let root = commands
+        .spawn((
+            Transform::from_xyz(0.0, 60.0, 0.0),
+            Visibility::default(),
+            SnapshotBuffer::default(),
+        ))
+        .id();
+
+    commands.spawn((
+        Mesh3d(meshes.add(Capsule3d::default())),
+        MeshMaterial3d(material.clone()),
+        ChildOf(root),
+    ));
+
+    let head = commands
+        .spawn((
+            Mesh3d(meshes.add(Cuboid::new(0.7, 0.7, 0.7))),
+            MeshMaterial3d(material),
+            Transform::from_xyz(0.0, 1.0, 0.0),
+            ChildOf(root),
+        ))
+        .id();
+
+    commands.entity(root).insert(Head(head));
+    root
 }

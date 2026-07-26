@@ -83,9 +83,12 @@ impl Physics {
     }
 
     pub fn add_body(&mut self, pos: Vec3) -> BodyHandle {
-        let body = RigidBodyBuilder::dynamic().translation(pos).build();
+        let body = RigidBodyBuilder::dynamic()
+            .translation(pos)
+            .lock_rotations()
+            .build();
         let handle = self.rigid_body_set.insert(body);
-        let collider = ColliderBuilder::ball(0.5).build();
+        let collider = ColliderBuilder::capsule_y(0.5, 0.5).mass(0.52).build();
 
         self.collider_set
             .insert_with_parent(collider, handle, &mut self.rigid_body_set);
