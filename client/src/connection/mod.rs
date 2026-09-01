@@ -17,7 +17,7 @@ pub struct NetworkPlugin;
 impl Plugin for NetworkPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, setup_connection)
-            .add_systems(Update, dispatch_world_events);
+            .add_systems(PreUpdate, dispatch_world_events);
     }
 }
 

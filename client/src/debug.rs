@@ -1,9 +1,10 @@
 use bevy::{
+    color::palettes::css::RED,
     diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin},
     prelude::*,
 };
 
-use crate::player::LocalPlayer;
+use crate::player::{Head, LocalPlayer, RemotePlayer};
 
 #[derive(Component)]
 struct DebugPanel;
@@ -53,9 +54,20 @@ impl Plugin for DebugPlugin {
         .add_systems(Startup, setup_debug_ui)
         .add_systems(
             Update,
-            (debug_performance, debug_player_position, debug_camera_info).run_if(is_debug),
+            (
+                debug_performance,
+                debug_player_position,
+                debug_camera_info,
+                toggle_debug,
+            )
+                .run_if(is_debug),
         )
-        .add_systems(Update, toggle_debug);
+        .add_systems(
+            PostUpdate,
+            draw_gizmos
+                .after(TransformSystems::Propagate)
+                .run_if(is_debug),
+        );
     }
 }
 
@@ -146,4 +158,25 @@ fn debug_camera_info(
         rotation.1.to_degrees(), // pitch
         rotation.0.to_degrees()  // yaw
     );
+}
+
+fn draw_gizmos(
+    mut gismos: Gizmos,
+    player_transforms: Query<&Transform, Or<(With<LocalPlayer>, With<RemotePlayer>)>>,
+    mut global_transforms: Query<&GlobalTransform>,
+    heads: Query<&Head>,
+) {
+    for &Head(head) in heads {
+        let Ok(head_global_transform) = global_transforms.get_mut(head) else {
+            return;
+        };
+
+        let origin = head_global_transform.translation();
+        gismos.arrow(origin, origin + head_global_transform.forward() * 2.0, RED);
+    }
+
+    for &transform in player_transforms {
+        let origin = transform.translation;
+        gismos.arrow(origin, origin + transform.forward() * 2.0, RED);
+    }
 }

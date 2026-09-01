@@ -1,4 +1,3 @@
-mod camera;
 mod connection;
 mod debug;
 mod player;
@@ -12,21 +11,10 @@ use bevy::{
     window::{CursorGrabMode, CursorOptions, PrimaryWindow},
 };
 
-use camera::CameraPlugin;
 use connection::NetworkPlugin;
 use debug::DebugPlugin;
 use player::PlayerPlugin;
 use world::WorldPlugin;
-
-#[derive(SystemSet, Debug, Clone, Hash, Eq, PartialEq)]
-enum Systems {
-    Input,
-    Movement,
-    PostMovement,
-    Network,
-    Chunk,
-    Mesh,
-}
 
 #[derive(Default, Debug, Resource)]
 pub struct Settings {
@@ -59,18 +47,7 @@ fn main() {
     let settings = Settings::from_args();
     let mut app = App::new();
 
-    app.configure_sets(
-        Update,
-        (
-            Systems::Input.run_if(is_cursor_locked),
-            Systems::Movement.after(Systems::Input),
-            Systems::PostMovement.after(Systems::Movement),
-            Systems::Network.after(Systems::PostMovement),
-            Systems::Chunk.after(Systems::Network),
-            Systems::Mesh.after(Systems::Network),
-        ),
-    )
-    .add_plugins((
+    app.add_plugins((
         DefaultPlugins
             .set(WindowPlugin {
                 primary_window: Some(Window {
@@ -84,7 +61,6 @@ fn main() {
                 meta_check: AssetMetaCheck::Never,
                 ..default()
             }),
-        CameraPlugin,
         DebugPlugin,
         PlayerPlugin,
         WorldPlugin,
@@ -112,7 +88,9 @@ fn setup(mut commands: Commands) {
     ));
 }
 
-fn is_cursor_locked(primary_cursor_options: Single<&CursorOptions, With<PrimaryWindow>>) -> bool {
+pub fn is_cursor_locked(
+    primary_cursor_options: Single<&CursorOptions, With<PrimaryWindow>>,
+) -> bool {
     primary_cursor_options.grab_mode == CursorGrabMode::Locked
 }
 

@@ -3,10 +3,7 @@ pub mod mesh;
 
 use bevy::prelude::*;
 
-use crate::{
-    Systems,
-    world::{chunk::*, mesh::*},
-};
+use crate::world::{chunk::*, mesh::*};
 
 pub const MAX_CHUNK_LOAD_PER_FRAME: usize = 20;
 pub const MAX_MESH_TASKS: usize = 100;
@@ -24,15 +21,11 @@ impl Plugin for WorldPlugin {
             .add_systems(Startup, load_assets)
             .add_systems(
                 Update,
-                (process_chunk_unload_queue, process_chunk_load_queue)
-                    .chain()
-                    .in_set(Systems::Chunk),
-            )
-            .add_systems(
-                Update,
-                (queue_mesh_tasks, collect_mesh_tasks, upload_meshes)
-                    .chain()
-                    .in_set(Systems::Mesh),
+                (
+                    (process_chunk_unload_queue, process_chunk_load_queue).chain(),
+                    (queue_mesh_tasks, collect_mesh_tasks, upload_meshes).chain(),
+                )
+                    .chain(),
             );
     }
 }

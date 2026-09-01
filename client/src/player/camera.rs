@@ -1,26 +1,12 @@
 use bevy::{input::mouse::MouseMotion, prelude::*};
 
-use crate::{Systems, player::LocalPlayer};
+use crate::player::LocalPlayer;
 
 const CAMERA_DISTANCE: f32 = 8.0;
 const CAMERA_HEIGHT: f32 = 2.0;
 
-pub struct CameraPlugin;
-
-impl Plugin for CameraPlugin {
-    fn build(&self, app: &mut App) {
-        app.add_systems(Startup, spawn_camera).add_systems(
-            Update,
-            (
-                camera_look.in_set(Systems::Input),
-                follow_player.in_set(Systems::PostMovement),
-            ),
-        );
-    }
-}
-
 #[derive(Component)]
-struct Camera {
+pub struct Camera {
     sensitivity: f32,
     pitch: f32,
     yaw: f32,
@@ -36,7 +22,7 @@ impl Default for Camera {
     }
 }
 
-fn spawn_camera(mut commands: Commands) {
+pub fn spawn_camera(mut commands: Commands) {
     let camera = Camera::default();
 
     commands.spawn((
@@ -47,7 +33,7 @@ fn spawn_camera(mut commands: Commands) {
     ));
 }
 
-fn camera_look(
+pub fn camera_look(
     mut mouse_motion: MessageReader<MouseMotion>,
     camera: Single<(&mut Camera, &mut Transform)>,
     mut local_player: Single<&mut LocalPlayer>,
@@ -71,7 +57,7 @@ fn camera_look(
     local_player.input.look = Vec3::from(transform.forward()).to_array();
 }
 
-fn follow_player(
+pub fn follow_player(
     mut camera_transform: Single<&mut Transform, With<Camera>>,
     player_transform: Single<&Transform, (With<LocalPlayer>, Without<Camera>)>,
 ) {
